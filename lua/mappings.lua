@@ -259,5 +259,24 @@ keymap.set("n", "<Esc>", function()
 end, {
   desc = "close floating win",
 })
--- Map Ctrl+n to toggle Neo-tree
-vim.keymap.set('n', '<C-n>', ':Neotree toggle<CR>', { noremap = true, silent = true })
+-- Map Ctrl+n to toggle Neo-tree at the current file's project (git/Maven/Gradle root),
+-- or at the file's own folder when it is not in a project, instead of Nvim's cwd.
+-- For a folder buffer (`nvim some_dir`), the tree shows that folder.
+vim.keymap.set("n", "<C-n>", function()
+  local args = { toggle = true }
+  local path = vim.api.nvim_buf_get_name(0)
+
+  if vim.bo.buftype == "" and path ~= "" and vim.uv.fs_stat(path) then
+    args.dir = require("folders").folder_for(path)
+    if vim.fn.isdirectory(path) == 0 then
+      args.reveal_file = path
+    end
+  end
+
+  require("neo-tree.command").execute(args)
+end, { silent = true, desc = "toggle Neo-tree at current file's project" })
+
+-- Map Ctrl+t to toggle a terminal panel at the bottom (Ctrl+t inside the panel hides it again)
+vim.keymap.set("n", "<C-t>", function()
+  require("terminal_panel").toggle()
+end, { silent = true, desc = "toggle terminal panel" })

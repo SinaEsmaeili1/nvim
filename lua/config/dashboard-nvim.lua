@@ -339,8 +339,10 @@ conf.header = vim.split(braille_header, "\n")
 conf.center = {
   {
     icon = "󰈞  ",
-    desc = "Find  File                              ",
-    action = "FzfLua files",
+    desc = "Find File/Folder                        ",
+    action = function()
+      require("folders").find_files_and_folders()
+    end,
     key = "<Leader> f f",
   },
   {
@@ -348,6 +350,14 @@ conf.center = {
     desc = "Recently opened files                   ",
     action = "FzfLua oldfiles",
     key = "<Leader> f r",
+  },
+  {
+    icon = "󰉋  ",
+    desc = "Recently opened folders                 ",
+    action = function()
+      require("folders").recent_folders()
+    end,
+    key = "<Leader> f d",
   },
   {
     icon = "󰈬  ",

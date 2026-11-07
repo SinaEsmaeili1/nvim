@@ -49,6 +49,7 @@ require("plugin_specs")
 require("custom-autocmd")
 require("mappings")
 require("diagnostic-conf")
+require("folders").setup() -- remember opened folders for "Recently opened folders"
 
 local color_scheme = require("colorschemes")
 color_scheme.rand_colorscheme()

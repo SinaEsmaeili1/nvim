@@ -17,7 +17,12 @@ require("fzf-lua").setup {
   },
 }
 
-vim.keymap.set("n", "<leader>ff", "<cmd>FzfLua files<cr>", { desc = "Fuzzy find files" })
+vim.keymap.set("n", "<leader>ff", function()
+  require("folders").find_files_and_folders()
+end, { desc = "Fuzzy find files and folders" })
+vim.keymap.set("n", "<leader>fd", function()
+  require("folders").recent_folders()
+end, { desc = "Fuzzy search recently opened folders" })
 vim.keymap.set("n", "<leader>fg", "<cmd>FzfLua live_grep<cr>", { desc = "Fuzzy grep files" })
 vim.keymap.set(
   "n",
