@@ -113,6 +113,12 @@ vim.api.nvim_create_autocmd("LspAttach", {
 
 -- Enable lsp servers when they are available
 
+-- Make servers installed by Mason (e.g., jdtls) visible to Nvim
+local mason_bin = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin")
+if not vim.env.PATH:find(mason_bin, 1, true) then
+  vim.env.PATH = mason_bin .. ":" .. vim.env.PATH
+end
+
 local capabilities = require("lsp_utils").get_default_capabilities()
 
 vim.lsp.config("*", {
@@ -131,6 +137,7 @@ local enabled_lsp_servers = {
    -- clangd = "clangd",
    -- vimls = "vim-language-server",
    -- ashls = "bash-language-server",
+   jdtls = "jdtls",
    -- yamlls = "yaml-language-server",
 }
 
