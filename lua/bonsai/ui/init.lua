@@ -460,9 +460,8 @@ function M.project_choices(history_path)
   return out
 end
 
-local function start_agent()
-  M.open { fullscreen = true }
-  -- Start Bonsai at the saved effort if it isn't running yet.
+-- Starts Bonsai at the saved effort if it isn't running yet.
+local function start_server()
   vim.system({ "bonsai-serve", "status" }, { text = true }, function(r)
     if (r.stdout or ""):find("is up", 1, true) then
       return
@@ -475,6 +474,18 @@ local function start_agent()
       end)
     end)
   end)
+end
+
+local function start_agent()
+  M.open { fullscreen = true }
+  start_server()
+end
+
+-- The start menu's "Ask Bonsai" (lua/config/dashboard-nvim.lua): the panel
+-- Ctrl+A opens, with Bonsai started if it isn't running.
+function M.start()
+  M.open()
+  start_server()
 end
 
 -- bonsai-agent: Bonsai as a terminal coding agent, full-screen. Started from

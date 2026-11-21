@@ -6,11 +6,11 @@ Nothing leaves my PC unless I say so. The model runs locally, and every edit, co
 
 ![Bonsai answering in its panel, with the pixel art bonsai in the status line](assets/readme/bonsai-panel.png)
 
-**Jump to:** [The Bonsai agent](#the-bonsai-agent) · [C++, Java and Python](#c-java-and-python) · [What else is in here](#what-else-is-in-here) · [What you need](#what-you-need) · [Built with](#built-with)
+**Jump to:** [The Bonsai agent](#the-bonsai-agent) · [The start menu](#the-start-menu) · [C++, Java and Python](#c-java-and-python) · [What else is in here](#what-else-is-in-here) · [What you need](#what-you-need) · [Built with](#built-with)
 
 ## The Bonsai agent
 
-Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Claude Code: the conversation, a status line with an animated pixel art bonsai and a plant word (*Photosynthesizing…*, *Pruning…*, *In full bloom ✓*), and an input box. In the terminal, `bonsai-agent` opens the same thing full screen. It's also in my app menu.
+Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Claude Code: the conversation, a status line with an animated pixel art bonsai and a plant word (*Photosynthesizing…*, *Pruning…*, *In full bloom ✓*), and an input box. In the terminal, `bonsai-agent` opens the same thing full screen. It's also in my app menu, and it's the first entry on Neovim's [start menu](#the-start-menu).
 
 ![Asking Bonsai for a C++ function: the bonsai works while it thinks, then the answer and how long it took](assets/readme/bonsai-agent.gif)
 
@@ -54,6 +54,14 @@ Context is the expensive part on a consumer GPU, so Bonsai keeps what it learns 
 
 The code is in `lua/bonsai/` (effort, sandbox, notes, search, and the panel in `ui/`) and `lua/config/codecompanion.lua`. Tests: `nvim --headless -c "luafile tests/bonsai/run.lua"`.
 
+## The start menu
+
+Open Neovim without a file and the start menu comes up with one of my ASCII arts on top, picked at random each time: the CYBERPUNK 2077 logo, Mikasa, Chainsaw Man, Gojo, Inosuke, Lucy and three more. It only picks an art that fits the window along with the whole menu, so a small window gets just the menu. The first entry is **Ask Bonsai**: press **b** and the Bonsai panel opens, and if the model isn't running yet, it starts.
+
+![The start menu with the CYBERPUNK 2077 art on top, and Ask Bonsai as the first entry](assets/readme/start-menu.png)
+
+The arts are in `lua/dashboard_art.lua`. To add one, I give it a name and paste its lines in as a new entry. Tests: `nvim --headless -c "luafile tests/start_menu/run.lua"`.
+
 ## C++, Java and Python
 
 All three work the same way, the way Java did first:
@@ -69,7 +77,7 @@ For web pages, `:live` serves the folder of the current HTML or JS file on local
 ## What else is in here
 
 - Ctrl+N opens the file tree at the current file's project.
-- The dashboard has "Find File/Folder" and "Recently opened folders".
+- The start menu also has "Find File/Folder" and "Recently opened folders".
 - Ctrl+T opens a terminal panel.
 
 ## What you need
