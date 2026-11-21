@@ -130,11 +130,11 @@ vim.lsp.config("*", {
 
 -- A mapping from lsp server name to the executable name
 local enabled_lsp_servers = {
-   -- pyright = "delance-langserver",
+   pyright = "pyright-langserver",
    -- ruff = "ruff",
    -- lua_ls = "lua-language-server",
    -- ltex = "ltex-ls",
-   -- clangd = "clangd",
+   clangd = "clangd",
    -- vimls = "vim-language-server",
    -- ashls = "bash-language-server",
    jdtls = "jdtls",

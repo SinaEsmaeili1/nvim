@@ -201,6 +201,12 @@ local plugin_specs = {
         window = {
           width = 30,
         },
+        event_handlers = {
+          {
+            event = "file_added", -- Hello World starter for a file created in the tree
+            handler = function(path) require("templates").fill_file(path) end,
+          },
+        },
       })
     end,
   },
