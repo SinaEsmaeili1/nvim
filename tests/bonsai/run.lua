@@ -187,6 +187,110 @@ test("/effort switches the level through bonsai-serve", function()
   eq(ran, "high", "level started")
 end)
 
+-- ---- sandbox (owner, 2026-11-21: "sanboxed based on the current directory and no esclation") ----
+
+local real_home = vim.uv.os_homedir()
+local project = vim.fn.tempname() .. "-project"
+vim.fn.mkdir(project .. "/src", "p")
+project = vim.uv.fs_realpath(project)
+local outside = vim.fn.tempname() .. "-outside"
+vim.fn.mkdir(outside, "p")
+vim.uv.fs_symlink(outside, project .. "/link-out")
+
+test("paths inside the project are allowed, others are refused", function()
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  eq(sandbox.inside("src/main.lua"), true, "relative inside")
+  eq(sandbox.inside(project .. "/new/file.txt"), true, "new file inside")
+  eq(sandbox.inside("../escape.txt"), false, "../")
+  eq(sandbox.inside(real_home .. "/.ssh/id_ed25519"), false, "~/.ssh")
+  eq(sandbox.inside("/etc/passwd"), false, "/etc")
+  eq(sandbox.inside("link-out/secret.txt"), false, "a symlink that leads outside")
+end)
+
+test("Bonsai's tools are off when Neovim was opened in the home folder or /", function()
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(real_home); eq(sandbox.usable(), false, "home")
+  sandbox.set_root("/"); eq(sandbox.usable(), false, "/")
+  sandbox.set_root(project); eq(sandbox.usable(), true, "a project folder")
+end)
+
+local function run_sandboxed(cmd)
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  return vim.system(sandbox.wrap(cmd), { text = true }):wait()
+end
+
+test("a command can write inside the project", function()
+  local r = run_sandboxed("echo hello > made-here.txt")
+  eq(r.code, 0, "exit code: " .. (r.stderr or ""))
+  eq(vim.fn.readfile(project .. "/made-here.txt"), { "hello" }, "file")
+end)
+
+test("a command cannot write outside the project", function()
+  local target = outside .. "/escaped.txt"
+  local r = run_sandboxed("echo x > " .. target)
+  truthy(r.code ~= 0, "exit code")
+  eq(vim.uv.fs_stat(target), nil, "file outside")
+  local home_target = real_home .. "/bonsai-sandbox-escape-test"
+  run_sandboxed("touch " .. home_target)
+  eq(vim.uv.fs_stat(home_target), nil, "file in home")
+end)
+
+test("a command cannot read the home folder", function()
+  local r = run_sandboxed("ls " .. real_home .. "/.ssh")
+  truthy(r.code ~= 0, "listing ~/.ssh must fail")
+end)
+
+test("a command has no network", function()
+  local r = run_sandboxed("getent hosts example.com || curl -s -m 5 -o /dev/null https://example.com")
+  truthy(r.code ~= 0, "network must fail")
+end)
+
+test("a command cannot escalate with sudo", function()
+  local r = run_sandboxed("sudo -n true")
+  truthy(r.code ~= 0, "sudo must fail")
+end)
+
+test("run_command runs every command inside the sandbox", function()
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  local tool = require("bonsai.tools.run_command")
+  local fake = { args = { cmd = "make test", flag = vim.NIL }, cmds = {} }
+  tool.handlers.setup(fake, {})
+  eq(#fake.cmds, 1, "one command")
+  eq(fake.cmds[1].cmd[1], "bwrap", "runs through bwrap")
+  eq(fake.cmds[1].cmd[#fake.cmds[1].cmd], "make test", "the command itself")
+end)
+
+test("file tools refuse paths outside the project", function()
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  for _, name in ipairs({ "read_file", "edit_file", "create_file", "overwrite_file", "delete_file" }) do
+    local tool = require("bonsai.tools." .. name)
+    local got
+    tool.cmds[1](nil, { filepath = real_home .. "/.ssh/id_ed25519" }, { output_cb = function(o) got = o end })
+    vim.wait(1000, function() return got ~= nil end)
+    eq(got and got.status, "error", name .. " status")
+    truthy(got and got.data:find("outside the project", 1, true), name .. " message")
+  end
+end)
+
+test("the chat uses the sandboxed tools", function()
+  local tools = cc.opts().interactions.chat.tools
+  for _, name in ipairs({ "run_command", "read_file", "edit_file", "create_file", "overwrite_file", "delete_file" }) do
+    eq(tools[name].path, "bonsai.tools." .. name, name)
+  end
+end)
+
+-- Owner, 2026-11-21: every website Bonsai visits needs approval first.
+test("web search and page fetches wait for approval", function()
+  local tools = cc.opts().interactions.chat.tools
+  eq(tools.web_search.opts.require_approval_before, true, "web_search")
+  eq(tools.fetch_webpage.opts.require_approval_before, true, "fetch_webpage")
+  eq(tools.fetch_webpage.opts.adapter, "markitdown", "pages are read locally, never through a third party")
+end)
+
 -- ---- plugin list ----
 
 test("Copilot is gone and codecompanion is in the plugin list", function()

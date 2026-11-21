@@ -84,18 +84,26 @@ function M.opts()
             approval_mode = "ask", -- never auto or yolo by default
           },
           ["run_command"] = {
+            path = "bonsai.tools.run_command", -- runs inside the sandbox
             opts = {
               require_approval_before = true,
               require_cmd_approval = true,
               safe_commands = {}, -- no command runs without asking
             },
           },
+          -- Every website needs the owner's approval first (owner, 2026-11-21).
+          -- Pages are read locally with markitdown, never through a third party.
+          ["web_search"] = { opts = { require_approval_before = true } },
+          ["fetch_webpage"] = { opts = { require_approval_before = true, adapter = "markitdown" } },
+          -- File tools refuse paths outside the project folder (bonsai.sandbox).
+          ["read_file"] = { path = "bonsai.tools.read_file" },
           ["edit_file"] = {
+            path = "bonsai.tools.edit_file",
             opts = { require_approval_before = { buffer = true, file = true } },
           },
-          ["create_file"] = { opts = { require_approval_before = true } },
-          ["overwrite_file"] = { opts = { require_approval_before = true } },
-          ["delete_file"] = { opts = { require_approval_before = true } },
+          ["create_file"] = { path = "bonsai.tools.create_file", opts = { require_approval_before = true } },
+          ["overwrite_file"] = { path = "bonsai.tools.overwrite_file", opts = { require_approval_before = true } },
+          ["delete_file"] = { path = "bonsai.tools.delete_file", opts = { require_approval_before = true } },
         },
       },
       inline = { adapter = "bonsai" },

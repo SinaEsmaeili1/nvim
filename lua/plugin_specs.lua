@@ -737,6 +737,10 @@ local plugin_specs = {
       -- only: insert and command-line Ctrl+A still go to the start of the line.
       { "<C-a>", "<cmd>CodeCompanionChat Toggle<cr>", mode = "n", desc = "Bonsai chat" },
     },
+    init = function()
+      -- Bonsai's sandbox is the folder Neovim was opened in (bonsai.sandbox).
+      vim.g.bonsai_root = vim.uv.cwd()
+    end,
     config = function()
       require("config.codecompanion").setup()
     end,
