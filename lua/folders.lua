@@ -153,7 +153,11 @@ function M.setup()
       local file = args.file
       -- buftype is set after reading for some buffers (e.g., help), so check it later
       vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(args.buf) and vim.bo[args.buf].buftype == "" and file ~= "" then
+        if
+          vim.api.nvim_buf_is_valid(args.buf)
+          and vim.bo[args.buf].buftype == ""
+          and file ~= ""
+        then
           M.remember(M.folder_for(file))
         end
       end)

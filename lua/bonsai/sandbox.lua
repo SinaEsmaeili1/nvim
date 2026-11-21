@@ -58,17 +58,28 @@ end
 -- has to be inside the project too (contract: NEOVIM-AGENT.md, Addendum 3, B2).
 function M.folder_refusal()
   local cwd = vim.fn.getcwd()
-  if not M.usable() then return M.refusal(cwd) end
+  if not M.usable() then
+    return M.refusal(cwd)
+  end
   if not M.inside(cwd) then
-    return ("Refused: Neovim's current folder (%s) is outside the project folder (%s). Go back with :cd %s"):format(cwd, M.root(), M.root())
+    return ("Refused: Neovim's current folder (%s) is outside the project folder (%s). Go back with :cd %s"):format(
+      cwd,
+      M.root(),
+      M.root()
+    )
   end
 end
 
 function M.refusal(path)
   if not M.usable() then
-    return ("Refused: Neovim was opened in %s, which is too wide for Bonsai. Open Neovim in a project folder."):format(M.root())
+    return ("Refused: Neovim was opened in %s, which is too wide for Bonsai. Open Neovim in a project folder."):format(
+      M.root()
+    )
   end
-  return ("Refused: `%s` is outside the project folder (%s). Bonsai can only work inside it."):format(path, M.root())
+  return ("Refused: `%s` is outside the project folder (%s). Bonsai can only work inside it."):format(
+    path,
+    M.root()
+  )
 end
 
 -- The command line, run by /bin/sh inside bubblewrap.
@@ -79,26 +90,57 @@ function M.wrap(cmd)
     "--unshare-all", -- its own user, pid, ipc, uts and cgroup namespaces, and no network
     "--die-with-parent",
     "--new-session",
-    "--ro-bind", "/usr", "/usr",
-    "--symlink", "usr/bin", "/bin",
-    "--symlink", "usr/bin", "/sbin",
-    "--symlink", "usr/lib", "/lib",
-    "--symlink", "usr/lib", "/lib64",
-    "--ro-bind", "/etc", "/etc",
-    "--proc", "/proc",
-    "--dev", "/dev",
-    "--tmpfs", "/tmp",
-    "--tmpfs", "/run",
-    "--bind", root, root, -- after /tmp, so a root under /tmp still works
-    "--chdir", root,
+    "--ro-bind",
+    "/usr",
+    "/usr",
+    "--symlink",
+    "usr/bin",
+    "/bin",
+    "--symlink",
+    "usr/bin",
+    "/sbin",
+    "--symlink",
+    "usr/lib",
+    "/lib",
+    "--symlink",
+    "usr/lib",
+    "/lib64",
+    "--ro-bind",
+    "/etc",
+    "/etc",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--tmpfs",
+    "/tmp",
+    "--tmpfs",
+    "/run",
+    "--bind",
+    root,
+    root, -- after /tmp, so a root under /tmp still works
+    "--chdir",
+    root,
     "--clearenv",
-    "--setenv", "PATH", "/usr/local/bin:/usr/bin",
-    "--setenv", "HOME", root,
-    "--setenv", "TMPDIR", "/tmp",
-    "--setenv", "LANG", vim.env.LANG or "C.UTF-8",
-    "--setenv", "TERM", "dumb",
+    "--setenv",
+    "PATH",
+    "/usr/local/bin:/usr/bin",
+    "--setenv",
+    "HOME",
+    root,
+    "--setenv",
+    "TMPDIR",
+    "/tmp",
+    "--setenv",
+    "LANG",
+    vim.env.LANG or "C.UTF-8",
+    "--setenv",
+    "TERM",
+    "dumb",
     "--",
-    "/bin/sh", "-c", cmd,
+    "/bin/sh",
+    "-c",
+    cmd,
   }
 end
 

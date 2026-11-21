@@ -54,7 +54,9 @@ end
 -- ---- the status line ----
 
 local function chat_bytes()
-  if not (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) then return 0 end
+  if not (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) then
+    return 0
+  end
   local b = S.chat.bufnr
   return vim.api.nvim_buf_get_offset(b, vim.api.nvim_buf_line_count(b))
 end
@@ -63,19 +65,22 @@ local machine
 
 local function status_text()
   local level = effort.current()
-  return status.format({
+  return status.format {
     state = machine:state(),
     word = machine.word,
-    elapsed = machine.busy and machine:elapsed() or (machine:state() == "success" and machine:elapsed() or nil),
+    elapsed = machine.busy and machine:elapsed()
+      or (machine:state() == "success" and machine:elapsed() or nil),
     tokens = (chat_bytes() - S.base_bytes) / 4, -- about four characters per token
     effort = level.name,
     thinking = level.thinking,
-  })
+  }
 end
 
 local function render()
   local buf = S.status_buf
-  if not (buf and vim.api.nvim_buf_is_valid(buf)) then return end
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    return
+  end
   local state = machine:state()
   local logo
   if kitty.available() then
@@ -92,7 +97,13 @@ local function render()
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   if kitty.available() then
     for row = 0, LOGO_ROWS - 1 do
-      vim.api.nvim_buf_set_extmark(buf, ns, row, 0, { end_col = #logo[row + 1], hl_group = "BonsaiLogo" })
+      vim.api.nvim_buf_set_extmark(
+        buf,
+        ns,
+        row,
+        0,
+        { end_col = #logo[row + 1], hl_group = "BonsaiLogo" }
+      )
     end
   end
 end
@@ -108,19 +119,32 @@ end
 local function start_timer()
   stop_timer()
   S.timer = vim.uv.new_timer()
-  S.timer:start(1000, 1000, vim.schedule_wrap(function()
-    if machine.busy then render() else stop_timer() end
-  end))
+  S.timer:start(
+    1000,
+    1000,
+    vim.schedule_wrap(function()
+      if machine.busy then
+        render()
+      else
+        stop_timer()
+      end
+    end)
+  )
 end
 
-machine = status.new({
-  on_change = function() vim.schedule(render) end,
-})
+machine = status.new {
+  on_change = function()
+    vim.schedule(render)
+  end,
+}
 
 -- ---- windows ----
 
 local function title()
-  return { { " Bonsai ", "FloatTitle" }, { "· /effort: " .. effort.current().name .. " ", "Comment" } }
+  return {
+    { " Bonsai ", "FloatTitle" },
+    { "· /effort: " .. effort.current().name .. " ", "Comment" },
+  }
 end
 
 local function geometry()
@@ -142,21 +166,43 @@ local function win_configs()
   local g = geometry()
   return {
     transcript = {
-      relative = "editor", row = g.transcript.row, col = g.col, width = g.inner, height = g.transcript.height,
-      border = "rounded", title = title(), title_pos = "left", zindex = 50,
+      relative = "editor",
+      row = g.transcript.row,
+      col = g.col,
+      width = g.inner,
+      height = g.transcript.height,
+      border = "rounded",
+      title = title(),
+      title_pos = "left",
+      zindex = 50,
     },
     status = {
-      relative = "editor", row = g.status.row, col = g.col + 1, width = g.inner, height = g.status.height,
-      style = "minimal", focusable = false, zindex = 50,
+      relative = "editor",
+      row = g.status.row,
+      col = g.col + 1,
+      width = g.inner,
+      height = g.status.height,
+      style = "minimal",
+      focusable = false,
+      zindex = 50,
     },
     input = {
-      relative = "editor", row = g.input.row, col = g.col, width = g.inner, height = g.input.height,
-      border = "rounded", footer = { { S.agent and AGENT_HINTS or HINTS, "Comment" } }, footer_pos = "left", zindex = 50,
+      relative = "editor",
+      row = g.input.row,
+      col = g.col,
+      width = g.inner,
+      height = g.input.height,
+      border = "rounded",
+      footer = { { S.agent and AGENT_HINTS or HINTS, "Comment" } },
+      footer_pos = "left",
+      zindex = 50,
     },
   }
 end
 
-local function valid(win) return win ~= nil and vim.api.nvim_win_is_valid(win) end
+local function valid(win)
+  return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
 
 function M.is_open()
   return valid(S.wins.transcript)
@@ -195,7 +241,13 @@ local function update_hint(buf)
   vim.api.nvim_buf_clear_namespace(buf, hint_ns, 0, -1)
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   if #lines <= 1 and (lines[1] or "") == "" then
-    vim.api.nvim_buf_set_extmark(buf, hint_ns, 0, 0, { virt_text = { { INPUT_HINT, "Comment" } }, virt_text_pos = "overlay" })
+    vim.api.nvim_buf_set_extmark(
+      buf,
+      hint_ns,
+      0,
+      0,
+      { virt_text = { { INPUT_HINT, "Comment" } }, virt_text_pos = "overlay" }
+    )
   end
 end
 
@@ -227,7 +279,9 @@ end
 
 function M.open(opts)
   opts = opts or {}
-  if M.is_open() then return focus_input() end
+  if M.is_open() then
+    return focus_input()
+  end
   S.fullscreen = opts.fullscreen or false
   if not (S.input_buf and vim.api.nvim_buf_is_valid(S.input_buf)) then
     S.input_buf = scratch("bonsai://input")
@@ -239,16 +293,30 @@ function M.open(opts)
   local cfg = win_configs()
   local placeholder = scratch("")
   S.wins.transcript = vim.api.nvim_open_win(
-    (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) and S.chat.bufnr or placeholder, true, cfg.transcript)
+    (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) and S.chat.bufnr
+      or placeholder,
+    true,
+    cfg.transcript
+  )
   if not (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) then
     new_chat()
   end
   -- A clean transcript: no line numbers or gutters. Set after the chat opens,
   -- since codecompanion sets its own window options then.
-  for opt, value in pairs({ wrap = true, linebreak = true, number = false, relativenumber = false, signcolumn = "no", foldcolumn = "0" }) do
+  for opt, value in pairs {
+    wrap = true,
+    linebreak = true,
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    foldcolumn = "0",
+  } do
     vim.wo[S.wins.transcript][opt] = value
   end
-  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_win_get_buf(S.wins.transcript) ~= placeholder then
+  if
+    vim.api.nvim_buf_is_valid(placeholder)
+    and vim.api.nvim_win_get_buf(S.wins.transcript) ~= placeholder
+  then
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
   S.wins.status = vim.api.nvim_open_win(S.status_buf, false, cfg.status)
@@ -259,14 +327,20 @@ end
 
 function M.close()
   stop_timer()
-  for _, name in ipairs({ "input", "status", "transcript" }) do
-    if valid(S.wins[name]) then pcall(vim.api.nvim_win_close, S.wins[name], true) end
+  for _, name in ipairs { "input", "status", "transcript" } do
+    if valid(S.wins[name]) then
+      pcall(vim.api.nvim_win_close, S.wins[name], true)
+    end
     S.wins[name] = nil
   end
 end
 
 function M.toggle()
-  if M.is_open() then M.close() else M.open() end
+  if M.is_open() then
+    M.close()
+  else
+    M.open()
+  end
 end
 
 local function refresh_title()
@@ -280,9 +354,13 @@ end
 -- everything else goes to the chat (so @{tools} still work).
 function M.submit(text)
   text = vim.trim(text or "")
-  if text == "" then return end
+  if text == "" then
+    return
+  end
   if text == "/effort" then
-    return effort.pick(function() refresh_title() end)
+    return effort.pick(function()
+      refresh_title()
+    end)
   elseif text == "/clear" then
     new_chat()
     return render()
@@ -292,15 +370,22 @@ function M.submit(text)
     return vim.cmd("qall")
   end
   S.base_bytes = chat_bytes()
-  S.chat:add_buf_message({ role = "user", content = text })
+  S.chat:add_buf_message { role = "user", content = text }
   S.chat:submit()
 end
 
 -- ---- codecompanion's events drive the status line and the focus ----
 
 local EVENTS = {
-  "ChatSubmitted", "RequestStarted", "RequestStreaming", "ToolStarted", "ToolFinished",
-  "ToolApprovalRequested", "ToolApprovalFinished", "ChatDone", "ChatStopped",
+  "ChatSubmitted",
+  "RequestStarted",
+  "RequestStreaming",
+  "ToolStarted",
+  "ToolFinished",
+  "ToolApprovalRequested",
+  "ToolApprovalFinished",
+  "ChatDone",
+  "ChatStopped",
 }
 
 local group = vim.api.nvim_create_augroup("bonsai_ui", { clear = true })
@@ -310,15 +395,24 @@ for _, name in ipairs(EVENTS) do
     pattern = "CodeCompanion" .. name,
     callback = function(ev)
       local data = ev.data or {}
-      if data.bufnr and S.chat and data.bufnr ~= S.chat.bufnr then return end
+      if data.bufnr and S.chat and data.bufnr ~= S.chat.bufnr then
+        return
+      end
       machine:event(name, data)
-      if name == "ChatSubmitted" then start_timer() end
-      if not M.is_open() then return end
+      if name == "ChatSubmitted" then
+        start_timer()
+      end
+      if not M.is_open() then
+        return
+      end
       if name == "ToolApprovalRequested" then
         -- The approval keys live in the chat buffer: go to the prompt.
         vim.cmd("stopinsert")
         vim.api.nvim_set_current_win(S.wins.transcript)
-        vim.api.nvim_win_set_cursor(S.wins.transcript, { vim.api.nvim_buf_line_count(S.chat.bufnr), 0 })
+        vim.api.nvim_win_set_cursor(
+          S.wins.transcript,
+          { vim.api.nvim_buf_line_count(S.chat.bufnr), 0 }
+        )
       elseif name == "ToolApprovalFinished" then
         focus_input()
       end
@@ -329,10 +423,14 @@ end
 vim.api.nvim_create_autocmd("VimResized", {
   group = group,
   callback = function()
-    if not M.is_open() then return end
+    if not M.is_open() then
+      return
+    end
     local cfg = win_configs()
     for name, win in pairs(S.wins) do
-      if valid(win) then vim.api.nvim_win_set_config(win, cfg[name]) end
+      if valid(win) then
+        vim.api.nvim_win_set_config(win, cfg[name])
+      end
     end
   end,
 })
@@ -348,7 +446,13 @@ function M.project_choices(history_path)
   local ok, lines = pcall(vim.fn.readfile, history_path)
   for _, dir in ipairs(ok and lines or {}) do
     local real = vim.uv.fs_realpath(vim.fs.normalize(dir))
-    if real and real ~= home and real ~= "/" and not seen[real] and vim.fn.isdirectory(real) == 1 then
+    if
+      real
+      and real ~= home
+      and real ~= "/"
+      and not seen[real]
+      and vim.fn.isdirectory(real) == 1
+    then
       seen[real] = true
       table.insert(out, real)
     end
@@ -357,14 +461,18 @@ function M.project_choices(history_path)
 end
 
 local function start_agent()
-  M.open({ fullscreen = true })
+  M.open { fullscreen = true }
   -- Start Bonsai at the saved effort if it isn't running yet.
   vim.system({ "bonsai-serve", "status" }, { text = true }, function(r)
-    if (r.stdout or ""):find("is up", 1, true) then return end
+    if (r.stdout or ""):find("is up", 1, true) then
+      return
+    end
     vim.schedule(function()
       local level = effort.current().name
       vim.notify("Starting Bonsai at effort " .. level .. "…", vim.log.levels.INFO)
-      effort.set(level, function(ok, out) vim.notify(out, ok and vim.log.levels.INFO or vim.log.levels.ERROR) end)
+      effort.set(level, function(ok, out)
+        vim.notify(out, ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+      end)
     end)
   end)
 end
@@ -373,13 +481,20 @@ end
 -- the app menu it is in home, so it asks for a project folder first.
 function M.agent_mode()
   S.agent = true
-  if sandbox.usable() then return start_agent() end
+  if sandbox.usable() then
+    return start_agent()
+  end
   local choices = M.project_choices()
   if #choices == 0 then
-    return vim.notify("Open bonsai-agent inside a project folder (cd there first).", vim.log.levels.WARN)
+    return vim.notify(
+      "Open bonsai-agent inside a project folder (cd there first).",
+      vim.log.levels.WARN
+    )
   end
   local function open_project(dir)
-    if not dir then return vim.cmd("qall") end
+    if not dir then
+      return vim.cmd("qall")
+    end
     vim.cmd.cd(dir)
     vim.g.bonsai_root = dir
     start_agent()
@@ -388,14 +503,20 @@ function M.agent_mode()
   -- Neovim's plain list if fzf-lua isn't there.
   local ok, fzf = pcall(require, "fzf-lua")
   if ok then
-    local items = vim.tbl_map(function(d) return vim.fn.fnamemodify(d, ":~") end, choices)
+    local items = vim.tbl_map(function(d)
+      return vim.fn.fnamemodify(d, ":~")
+    end, choices)
     local picked = false
     return fzf.fzf_exec(items, {
       prompt = "Bonsai: which project?> ",
       winopts = {
         -- Closing the picker without a choice quits the agent, as the plain list does.
         on_close = function()
-          vim.schedule(function() if not picked then vim.cmd("qall") end end)
+          vim.schedule(function()
+            if not picked then
+              vim.cmd("qall")
+            end
+          end)
         end,
       },
       actions = {
@@ -406,8 +527,12 @@ function M.agent_mode()
       },
     })
   end
-  vim.ui.select(choices, { prompt = "Bonsai: which project?", format_item = function(d) return vim.fn.fnamemodify(d, ":~") end },
-    open_project)
+  vim.ui.select(choices, {
+    prompt = "Bonsai: which project?",
+    format_item = function(d)
+      return vim.fn.fnamemodify(d, ":~")
+    end,
+  }, open_project)
 end
 
 return M

@@ -14,7 +14,9 @@ M.URL = "http://127.0.0.1:8089"
 function M.api_key()
   local f = io.open(vim.fs.joinpath(vim.fs.dirname(effort.state_file()), "api-key"), "r")
   local key = f and vim.trim(f:read("*a") or "") or ""
-  if f then f:close() end
+  if f then
+    f:close()
+  end
   return key
 end
 
@@ -32,7 +34,10 @@ M.handlers = {
   -- one at the top (codecompanion's guide, running-local-models.md).
   form_messages = function(self, messages)
     local merged = require("codecompanion.adapters.utils").merge_system_messages(messages)
-    return require("codecompanion.adapters.http.openai_compatible").handlers.form_messages(self, merged)
+    return require("codecompanion.adapters.http.openai_compatible").handlers.form_messages(
+      self,
+      merged
+    )
   end,
 }
 
@@ -43,7 +48,9 @@ local function bonsai_adapter()
     env = {
       url = M.URL,
       -- The server answers only requests that carry its key.
-      api_key = function() return M.api_key() end,
+      api_key = function()
+        return M.api_key()
+      end,
     },
     schema = {
       -- llama-server serves one model whatever the name says, so the model
@@ -52,7 +59,9 @@ local function bonsai_adapter()
       model = {
         default = "bonsai",
         choices = function()
-          return { bonsai = { formatted_name = "Bonsai", meta = { context_window = effort.current().ctx } } }
+          return {
+            bonsai = { formatted_name = "Bonsai", meta = { context_window = effort.current().ctx } },
+          }
         end,
       },
     },
@@ -147,9 +156,18 @@ function M.opts()
             path = "bonsai.tools.edit_file",
             opts = { require_approval_before = { buffer = true, file = true } },
           },
-          ["create_file"] = { path = "bonsai.tools.create_file", opts = { require_approval_before = true } },
-          ["overwrite_file"] = { path = "bonsai.tools.overwrite_file", opts = { require_approval_before = true } },
-          ["delete_file"] = { path = "bonsai.tools.delete_file", opts = { require_approval_before = true } },
+          ["create_file"] = {
+            path = "bonsai.tools.create_file",
+            opts = { require_approval_before = true },
+          },
+          ["overwrite_file"] = {
+            path = "bonsai.tools.overwrite_file",
+            opts = { require_approval_before = true },
+          },
+          ["delete_file"] = {
+            path = "bonsai.tools.delete_file",
+            opts = { require_approval_before = true },
+          },
           -- Diagnostics open the file they're given, so they pass the file guard too. Search and
           -- git tools work in Neovim's current folder, so they run only while it's in the project.
           ["get_diagnostics"] = { path = "bonsai.tools.get_diagnostics" },

@@ -11,7 +11,7 @@ return function(module)
     tool.cmds[i] = function(self, args, opts)
       local reason = sandbox.folder_refusal()
       if reason then
-        return opts.output_cb({ status = "error", data = reason })
+        return opts.output_cb { status = "error", data = reason }
       end
       return run(self, args, opts)
     end

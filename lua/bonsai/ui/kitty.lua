@@ -15,12 +15,15 @@ local ESC = "\27"
 local BASE_ID = 0xB0A500 -- image ids 0xB0A501..0xB0A506, one per state
 
 -- kitty's row and column diacritics for Unicode placeholders (the first 8).
-local DIACRITICS = { "\u{0305}", "\u{030D}", "\u{030E}", "\u{0310}", "\u{0312}", "\u{033D}", "\u{033E}", "\u{033F}" }
+local DIACRITICS =
+  { "\u{0305}", "\u{030D}", "\u{030E}", "\u{0310}", "\u{0312}", "\u{033D}", "\u{033E}", "\u{033F}" }
 local PLACEHOLDER = "\u{10EEEE}"
 
 function M.image_id(state)
   for i, s in ipairs(M.STATES) do
-    if s == state then return BASE_ID + i end
+    if s == state then
+      return BASE_ID + i
+    end
   end
 end
 
@@ -51,7 +54,10 @@ function M.upload_commands(state, files)
   local id = M.image_id(state)
   local out = { cmd(("a=t,f=100,t=f,i=%d,q=2"):format(id), vim.base64.encode(files[1])) }
   for i = 2, #files do
-    table.insert(out, cmd(("a=f,f=100,t=f,i=%d,z=%d,q=2"):format(id, M.FRAME_MS), vim.base64.encode(files[i])))
+    table.insert(
+      out,
+      cmd(("a=f,f=100,t=f,i=%d,z=%d,q=2"):format(id, M.FRAME_MS), vim.base64.encode(files[i]))
+    )
   end
   table.insert(out, cmd(("a=a,i=%d,r=1,z=%d,q=2"):format(id, M.FRAME_MS)))
   table.insert(out, cmd(("a=a,i=%d,s=3,v=%d,q=2"):format(id, state == "success" and 2 or 1)))
@@ -87,15 +93,20 @@ end
 
 function M.available()
   local term = vim.env.TERM or ""
-  return (term:find("kitty", 1, true) ~= nil or vim.env.KITTY_WINDOW_ID ~= nil) and vim.o.termguicolors
+  return (term:find("kitty", 1, true) ~= nil or vim.env.KITTY_WINDOW_ID ~= nil)
+    and vim.o.termguicolors
 end
 
 local ready = {}
 
 -- Uploads a state's animation the first time it is needed.
 function M.ensure(state, cols, rows)
-  if ready[state] or not M.available() then return end
-  for _, c in ipairs(M.upload_commands(state, M.frames(state))) do M.write(c) end
+  if ready[state] or not M.available() then
+    return
+  end
+  for _, c in ipairs(M.upload_commands(state, M.frames(state))) do
+    M.write(c)
+  end
   M.write(M.placement_command(M.image_id(state), cols, rows))
   ready[state] = true
 end

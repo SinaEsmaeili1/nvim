@@ -29,17 +29,28 @@ return {
           if data.status >= 300 then
             return {
               status = "error",
-              content = fmt("SearXNG answered %s. Is it running? Check with: systemctl --user status searxng", data.status),
+              content = fmt(
+                "SearXNG answered %s. Is it running? Check with: systemctl --user status searxng",
+                data.status
+              ),
             }
           end
           local ok, decoded = pcall(vim.json.decode, data.body)
           if not ok or type(decoded) ~= "table" then
-            return { status = "error", content = "SearXNG's answer wasn't JSON (is the json format enabled in its settings?)" }
+            return {
+              status = "error",
+              content = "SearXNG's answer wasn't JSON (is the json format enabled in its settings?)",
+            }
           end
           local out = {}
           for _, r in ipairs(decoded.results or {}) do
-            if #out >= MAX_RESULTS then break end
-            table.insert(out, { title = r.title or "", url = r.url or "", content = r.content or "" })
+            if #out >= MAX_RESULTS then
+              break
+            end
+            table.insert(
+              out,
+              { title = r.title or "", url = r.url or "", content = r.content or "" }
+            )
           end
           if #out == 0 then
             return { status = "error", content = "No results found" }

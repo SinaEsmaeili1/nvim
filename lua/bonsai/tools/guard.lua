@@ -22,16 +22,24 @@ end
 -- Paths are resolved the way the plugin opens them: from Neovim's current folder.
 local function refusal(params, args)
   local folder = sandbox.folder_refusal()
-  if folder then return folder end
+  if folder then
+    return folder
+  end
   args = type(args) == "table" and args or {}
-  local given = vim.iter(params):any(function(name) return args[name] ~= nil end)
-  if not given then return "Refused: no file path was given." end
+  local given = vim.iter(params):any(function(name)
+    return args[name] ~= nil
+  end)
+  if not given then
+    return "Refused: no file path was given."
+  end
   for name, value in pairs(args) do
     if is_path_name(name) then
       if type(value) ~= "string" or value == "" then
         return ("Refused: `%s` is not a file path."):format(name)
       end
-      if not sandbox.inside(vim.fs.abspath(value)) then return sandbox.refusal(value) end
+      if not sandbox.inside(vim.fs.abspath(value)) then
+        return sandbox.refusal(value)
+      end
     end
   end
 end
@@ -45,7 +53,7 @@ return function(module)
     tool.cmds[i] = function(self, args, opts)
       local reason = refusal(params, args)
       if reason then
-        return opts.output_cb({ status = "error", data = reason })
+        return opts.output_cb { status = "error", data = reason }
       end
       return run(self, args, opts)
     end

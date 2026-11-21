@@ -6,19 +6,23 @@ vim.defer_fn(function()
   vim.cmd("cquit 2")
 end, 180000)
 
-require("lazy").load({ plugins = { "codecompanion.nvim" } })
+require("lazy").load { plugins = { "codecompanion.nvim" } }
 
 local done = false
 vim.api.nvim_create_autocmd("User", {
   pattern = "CodeCompanionChatDone",
-  callback = function() done = true end,
+  callback = function()
+    done = true
+  end,
 })
 
 local chat = require("codecompanion").chat()
-chat:add_buf_message({ role = "user", content = "Reply with exactly one word: pong" })
+chat:add_buf_message { role = "user", content = "Reply with exactly one word: pong" }
 chat:submit()
 
-vim.wait(175000, function() return done end, 200)
+vim.wait(175000, function()
+  return done
+end, 200)
 
 local text = table.concat(vim.api.nvim_buf_get_lines(chat.bufnr, 0, -1, false), "\n")
 print(text:sub(-300))

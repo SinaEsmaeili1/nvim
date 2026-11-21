@@ -73,7 +73,15 @@ local function have_node()
 end
 
 local function install_cmd()
-  return { "npm", "install", "--prefix", M.dir(), "live-server@" .. VERSION, "--no-audit", "--no-fund" }
+  return {
+    "npm",
+    "install",
+    "--prefix",
+    M.dir(),
+    "live-server@" .. VERSION,
+    "--no-audit",
+    "--no-fund",
+  }
 end
 
 function M.installed()
@@ -82,8 +90,12 @@ end
 
 -- Synchronous install; returns ok, err.
 function M.ensure_installed()
-  if M.installed() then return true end
-  if not have_node() then return false, "node and npm are required" end
+  if M.installed() then
+    return true
+  end
+  if not have_node() then
+    return false, "node and npm are required"
+  end
   vim.fn.mkdir(M.dir(), "p")
   local r = vim.system(install_cmd(), { text = true, cwd = M.dir() }):wait(180000)
   if r.code ~= 0 or not M.installed() then
@@ -93,26 +105,39 @@ function M.ensure_installed()
 end
 
 function M.state()
-  if not current then return nil end
+  if not current then
+    return nil
+  end
   return { pid = current.pid, root = current.root, port = current.port }
 end
 
 function M.stop()
-  if not current then return false end
+  if not current then
+    return false
+  end
   local job = current
   current = nil
-  pcall(function() job.job:kill(15) end)
-  pcall(function() job.job:wait(1500) end)
+  pcall(function()
+    job.job:kill(15)
+  end)
+  pcall(function()
+    job.job:wait(1500)
+  end)
   return true
 end
 
 local function launch(o)
   local file = o.file
-  if file == nil then file = vim.api.nvim_buf_get_name(0) end
+  if file == nil then
+    file = vim.api.nvim_buf_get_name(0)
+  end
   local plan = M.plan(file, o.cwd or vim.fn.getcwd())
   local port = pick_port(M.opts.port)
-  if not port then return notify("no free port on " .. HOST, vim.log.levels.ERROR) end
-  local argv = M.argv({ root = plan.root, port = port, open = plan.open, no_browser = M.opts.no_browser })
+  if not port then
+    return notify("no free port on " .. HOST, vim.log.levels.ERROR)
+  end
+  local argv =
+    M.argv { root = plan.root, port = port, open = plan.open, no_browser = M.opts.no_browser }
   -- `job` is declared first: inside `local ok, job = pcall(...)` the callback would see a global
   -- `job`, so a server that died by itself was never noticed (lead's review, 2026-11-21).
   local job
@@ -122,12 +147,17 @@ local function launch(o)
         if current and current.job == job then
           current = nil
           local why = vim.trim(result.stderr or "")
-          notify("the server stopped by itself" .. (why ~= "" and (": " .. why:sub(1, 200)) or ""), vim.log.levels.WARN)
+          notify(
+            "the server stopped by itself" .. (why ~= "" and (": " .. why:sub(1, 200)) or ""),
+            vim.log.levels.WARN
+          )
         end
       end)
     end)
   end)
-  if not ok then return notify("could not start live-server: " .. tostring(err), vim.log.levels.ERROR) end
+  if not ok then
+    return notify("could not start live-server: " .. tostring(err), vim.log.levels.ERROR)
+  end
   current = { job = job, pid = job.pid, root = plan.root, port = port }
   notify(("serving %s at localhost:%d (:live again to stop)"):format(plan.root, port))
 end
@@ -138,13 +168,19 @@ function M.start(o)
   if not have_node() then
     return notify("node and npm are required for :live, but were not found", vim.log.levels.ERROR)
   end
-  if M.installed() then return launch(o) end
-  if M.opts.sync_install then
-    local ok, err = M.ensure_installed()
-    if not ok then return notify(err, vim.log.levels.ERROR) end
+  if M.installed() then
     return launch(o)
   end
-  if installing then return notify("live-server is still installing, try again shortly") end
+  if M.opts.sync_install then
+    local ok, err = M.ensure_installed()
+    if not ok then
+      return notify(err, vim.log.levels.ERROR)
+    end
+    return launch(o)
+  end
+  if installing then
+    return notify("live-server is still installing, try again shortly")
+  end
   installing = true
   vim.fn.mkdir(M.dir(), "p")
   notify("installing live-server@" .. VERSION .. " into " .. M.dir() .. " (first use)")
@@ -163,7 +199,9 @@ end
 function M.toggle(o)
   o = o or {}
   local file = o.file
-  if file == nil then file = vim.api.nvim_buf_get_name(0) end
+  if file == nil then
+    file = vim.api.nvim_buf_get_name(0)
+  end
   if current and current.root == M.plan(file, o.cwd or vim.fn.getcwd()).root then
     M.stop()
     return notify("stopped")
@@ -172,15 +210,21 @@ function M.toggle(o)
 end
 
 function M.setup()
-  vim.api.nvim_create_user_command("Live", function() M.toggle() end, {
+  vim.api.nvim_create_user_command("Live", function()
+    M.toggle()
+  end, {
     nargs = 0,
     desc = "Start or stop a live server for the current folder",
   })
   -- Neovim commands start with a capital: typing a bare "live" at ":" means "Live".
-  vim.cmd([[cnoreabbrev <expr> live (getcmdtype() ==# ':' && getcmdline() ==# 'live') ? 'Live' : 'live']])
+  vim.cmd(
+    [[cnoreabbrev <expr> live (getcmdtype() ==# ':' && getcmdline() ==# 'live') ? 'Live' : 'live']]
+  )
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = vim.api.nvim_create_augroup("LiveServer", { clear = true }),
-    callback = function() M.stop() end,
+    callback = function()
+      M.stop()
+    end,
   })
 end
 

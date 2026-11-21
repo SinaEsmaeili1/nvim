@@ -61,22 +61,21 @@ local plugin_specs = {
     event = "VeryLazy",
   },
   {
-   "nvim-treesitter/nvim-treesitter",
-   build = ":TSUpdate",
-   config = function()
-    -- This code is now logically safe because it only runs 
-    -- AFTER Lazy has added the path to Neovim.
-     require("config.treesitter")
-    
-  end,
+    "nvim-treesitter/nvim-treesitter",
+    build = ":TSUpdate",
+    config = function()
+      -- This code is now logically safe because it only runs
+      -- AFTER Lazy has added the path to Neovim.
+      require("config.treesitter")
+    end,
   },
   {
-  "nvim-tree/nvim-tree.lua",
-  dependencies = { "nvim-tree/nvim-web-devicons" },
-  config = function()
-    -- This is the specific line that "connects" the file you showed me
-    require("config.nvim-tree") 
-  end,
+    "nvim-tree/nvim-tree.lua",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      -- This is the specific line that "connects" the file you showed me
+      require("config.nvim-tree")
+    end,
   },
 
   -- Show match number and index for searching
@@ -102,7 +101,7 @@ local plugin_specs = {
     end,
     event = "VeryLazy",
   },
-  { 
+  {
     "MeanderingProgrammer/render-markdown.nvim",
     main = "render-markdown",
     opts = {},
@@ -193,21 +192,23 @@ local plugin_specs = {
     branch = "v3.x",
     dependencies = {
       "nvim-lua/plenary.nvim",
-      "nvim-tree/nvim-web-devicons", 
+      "nvim-tree/nvim-web-devicons",
       "MunifTanjim/nui.nvim",
     },
     config = function()
-      require("neo-tree").setup({
+      require("neo-tree").setup {
         window = {
           width = 30,
         },
         event_handlers = {
           {
             event = "file_added", -- Hello World starter for a file created in the tree
-            handler = function(path) require("templates").fill_file(path) end,
+            handler = function(path)
+              require("templates").fill_file(path)
+            end,
           },
         },
-      })
+      }
     end,
   },
   {
@@ -741,7 +742,12 @@ local plugin_specs = {
       vim.g.bonsai_root = vim.uv.cwd()
       -- Ctrl+A opens or closes Bonsai's Claude Code-style panel (bonsai.ui).
       -- Normal mode only: insert and command-line Ctrl+A still go to the start of the line.
-      vim.keymap.set("n", "<C-a>", "<cmd>lua require('bonsai.ui').toggle()<cr>", { desc = "Bonsai chat" })
+      vim.keymap.set(
+        "n",
+        "<C-a>",
+        "<cmd>lua require('bonsai.ui').toggle()<cr>",
+        { desc = "Bonsai chat" }
+      )
     end,
     config = function()
       require("config.codecompanion").setup()
