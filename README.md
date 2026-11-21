@@ -1,14 +1,18 @@
 # My Neovim, with Bonsai as a local coding agent
 
-This is the Neovim I use every day on Arch + Hyprland, in kitty with fish. I've shaped it over the year: Java support, a file tree that opens at the current project, and a terminal panel. The newest part is **agentic coding with Bonsai**: a 27 billion parameter model running on my own GPU, working as a coding agent right in the editor or full screen in the terminal.
+This is the Neovim I use every day on Arch + Hyprland, in kitty with fish. I've shaped it over the year: C++, Java and Python set up the same way, Hello World templates for new files, a live server for web pages, a file tree that opens at the current project, and a terminal panel. The newest part is **agentic coding with Bonsai**: a 27 billion parameter model running on my own GPU, working as a coding agent right in the editor or full screen in the terminal.
 
 Nothing leaves my PC unless I say so. The model runs locally, and every edit, command and website waits for my yes.
 
-**Jump to:** [The Bonsai agent](#the-bonsai-agent) · [What else is in here](#what-else-is-in-here) · [What you need](#what-you-need) · [Built with](#built-with)
+![Bonsai answering in its panel, with the pixel art bonsai in the status line](assets/readme/bonsai-panel.png)
+
+**Jump to:** [The Bonsai agent](#the-bonsai-agent) · [C++, Java and Python](#c-java-and-python) · [What else is in here](#what-else-is-in-here) · [What you need](#what-you-need) · [Built with](#built-with)
 
 ## The Bonsai agent
 
 Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Claude Code: the conversation, a status line with an animated pixel art bonsai and a plant word (*Photosynthesizing…*, *Pruning…*, *In full bloom ✓*), and an input box. In the terminal, `bonsai-agent` opens the same thing full screen. It's also in my app menu.
+
+![Asking Bonsai for a C++ function: the bonsai works while it thinks, then the answer and how long it took](assets/readme/bonsai-agent.gif)
 
 <details>
 <summary><b>/effort: trade speed for context</b></summary>
@@ -50,9 +54,20 @@ Context is the expensive part on a consumer GPU, so Bonsai keeps what it learns 
 
 The code is in `lua/bonsai/` (effort, sandbox, notes, search, and the panel in `ui/`) and `lua/config/codecompanion.lua`. Tests: `nvim --headless -c "luafile tests/bonsai/run.lua"`.
 
+## C++, Java and Python
+
+All three work the same way, the way Java did first:
+
+- **A new file starts as Hello World.** `nvim hello.cpp`, `nvim Main.java` or `nvim hello.py` (any name) opens a program that prints `Hello, World!`, and so does a file made in the file tree. New `.html` and `.js` files get theirs too.
+- **`<space>r` runs the file** in a terminal below: Python with `python3`, C++ built with clang++ (C++17, warnings on), Java with `java`. Press it again to stop a run.
+- **Colors, hints and completion** come from treesitter and a language server for each: clangd, jdtls and pyright.
+
+![New files start as Hello World, and <space>r runs them](assets/readme/hello-world-run.gif)
+
+For web pages, `:live` serves the folder of the current HTML or JS file on localhost:5500, opens it in the browser and reloads it on every save, like VS Code's Live Server. `:live` again stops it.
+
 ## What else is in here
 
-- Java completion through jdtls, with `<space>r` to run the current Java file.
 - Ctrl+N opens the file tree at the current file's project.
 - The dashboard has "Find File/Folder" and "Recently opened folders".
 - Ctrl+T opens a terminal panel.
