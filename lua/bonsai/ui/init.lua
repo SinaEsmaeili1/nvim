@@ -354,13 +354,36 @@ function M.agent_mode()
   if #choices == 0 then
     return vim.notify("Open bonsai-agent inside a project folder (cd there first).", vim.log.levels.WARN)
   end
+  local function open_project(dir)
+    if not dir then return vim.cmd("qall") end
+    vim.cmd.cd(dir)
+    vim.g.bonsai_root = dir
+    start_agent()
+  end
+  -- The same searchable picker as the dashboard's "Recently opened folders";
+  -- Neovim's plain list if fzf-lua isn't there.
+  local ok, fzf = pcall(require, "fzf-lua")
+  if ok then
+    local items = vim.tbl_map(function(d) return vim.fn.fnamemodify(d, ":~") end, choices)
+    local picked = false
+    return fzf.fzf_exec(items, {
+      prompt = "Bonsai: which project?> ",
+      winopts = {
+        -- Closing the picker without a choice quits the agent, as the plain list does.
+        on_close = function()
+          vim.schedule(function() if not picked then vim.cmd("qall") end end)
+        end,
+      },
+      actions = {
+        ["default"] = function(selected)
+          picked = selected ~= nil and selected[1] ~= nil
+          open_project(picked and vim.fs.normalize(vim.fn.expand(selected[1])) or nil)
+        end,
+      },
+    })
+  end
   vim.ui.select(choices, { prompt = "Bonsai: which project?", format_item = function(d) return vim.fn.fnamemodify(d, ":~") end },
-    function(dir)
-      if not dir then return vim.cmd("qall") end
-      vim.cmd.cd(dir)
-      vim.g.bonsai_root = dir
-      start_agent()
-    end)
+    open_project)
 end
 
 return M

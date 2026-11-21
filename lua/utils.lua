@@ -65,7 +65,8 @@ function M.is_compatible_version(expected_version)
   end
 
   local result = version.cmp(expect_ver, actual_ver)
-  if result ~= 0 then
+  -- Warn only when this Nvim is older than the config expects; a newer one is fine.
+  if result > 0 then
     local _ver = string.format("%s.%s.%s", actual_ver.major, actual_ver.minor, actual_ver.patch)
     local msg = string.format(
       "Expect nvim version %s, but your current nvim version is %s. Use at your own risk!",
