@@ -420,7 +420,8 @@ test("the status line reads like Claude Code's, with plant words", function()
   eq(status.format({ state = "success", word = "In full bloom", elapsed = 14, tokens = 2300, effort = "high", thinking = true }),
     "In full bloom ✓ (14s · ↓ ~2.3k tokens · thinking with high effort)", "success")
   eq(status.format({ state = "listening", word = "Soaking it in" }), "Soaking it in…", "listening")
-  eq(status.format({ state = "idle", effort = "medium" }), "Ready · /effort: medium", "idle")
+  -- Changed 2026-11-21: the idle line now also says where to type (owner couldn't find the input).
+  eq(status.format({ state = "idle", effort = "medium" }), "Ready · /effort: medium · type below and press Enter", "idle")
 end)
 
 test("the animation follows what Bonsai is doing", function()
@@ -511,6 +512,28 @@ test("the layout: transcript, status line with the logo, and an input box with t
   local i = vim.api.nvim_win_get_config(w.input)
   truthy(vim.inspect(i.footer):find("Ctrl+A", 1, true) and vim.inspect(i.footer):find("/effort", 1, true), "hints: " .. vim.inspect(i.footer))
   eq(vim.api.nvim_get_current_win(), w.input, "the cursor starts in the input box")
+end)
+
+-- Added 2026-11-21: the owner launched the agent and asked "where can I chat with the agent?":
+-- the input box was an empty box with no prompt, and the transcript had line numbers.
+test("the input box says what to do when it's empty, and the transcript has no line numbers", function()
+  local ui = require("bonsai.ui")
+  local w = ui.windows()
+  local buf = vim.api.nvim_win_get_buf(w.input)
+  local ns = vim.api.nvim_create_namespace("bonsai_input_hint")
+  local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+  truthy(#marks == 1, "one placeholder")
+  local text = marks[1][4].virt_text[1][1]
+  truthy(text:find("Ask Bonsai", 1, true) and text:find("Enter", 1, true), "placeholder: " .. text)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "hello" })
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  eq(#vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}), 0, "gone while typing")
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  eq(#vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}), 1, "back when empty")
+  eq(vim.wo[w.transcript].number, false, "no line numbers")
+  eq(vim.wo[w.transcript].relativenumber, false, "no relative numbers")
+  eq(require("bonsai.ui.status").format({ state = "idle", effort = "medium" }), "Ready · /effort: medium · type below and press Enter", "idle text")
 end)
 
 test("Ctrl+A hides the layout and brings back the same chat", function()

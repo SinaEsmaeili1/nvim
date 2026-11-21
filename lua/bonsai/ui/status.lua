@@ -23,7 +23,7 @@ end
 -- info: { state, word, elapsed (s), tokens, effort (name), thinking (bool) }
 function M.format(info)
   if info.state == "idle" then
-    return "Ready · /effort: " .. (info.effort or "medium")
+    return "Ready · /effort: " .. (info.effort or "medium") .. " · type below and press Enter"
   end
   if info.state == "listening" and not info.elapsed then
     return info.word .. "…"

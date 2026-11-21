@@ -170,6 +170,13 @@ local function focus_input()
   if valid(S.wins.input) then
     vim.api.nvim_set_current_win(S.wins.input)
     vim.cmd("startinsert!")
+    -- Again once whatever is still closing (the project picker) is done, or the
+    -- box is left in normal mode and typing runs commands instead of text.
+    vim.defer_fn(function()
+      if valid(S.wins.input) and vim.api.nvim_get_current_win() == S.wins.input then
+        vim.cmd("startinsert!")
+      end
+    end, 50)
   end
 end
 
@@ -180,8 +187,21 @@ local function scratch(name)
   return buf
 end
 
+-- A greyed-out hint in the empty input box, so it's clear where to type.
+local hint_ns = vim.api.nvim_create_namespace("bonsai_input_hint")
+local INPUT_HINT = "Ask Bonsai anything… (Enter to send · Shift+Enter for a new line)"
+
+local function update_hint(buf)
+  vim.api.nvim_buf_clear_namespace(buf, hint_ns, 0, -1)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  if #lines <= 1 and (lines[1] or "") == "" then
+    vim.api.nvim_buf_set_extmark(buf, hint_ns, 0, 0, { virt_text = { { INPUT_HINT, "Comment" } }, virt_text_pos = "overlay" })
+  end
+end
+
 local function setup_input(buf)
   vim.bo[buf].filetype = "markdown"
+  update_hint(buf)
   local function send()
     local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
@@ -194,6 +214,7 @@ local function setup_input(buf)
     buffer = buf,
     callback = function()
       local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+      update_hint(buf)
       machine:event("InputChanged", { text = vim.trim(text) })
     end,
   })
@@ -219,10 +240,13 @@ function M.open(opts)
   local placeholder = scratch("")
   S.wins.transcript = vim.api.nvim_open_win(
     (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) and S.chat.bufnr or placeholder, true, cfg.transcript)
-  vim.wo[S.wins.transcript].wrap = true
-  vim.wo[S.wins.transcript].linebreak = true
   if not (S.chat and S.chat.bufnr and vim.api.nvim_buf_is_valid(S.chat.bufnr)) then
     new_chat()
+  end
+  -- A clean transcript: no line numbers or gutters. Set after the chat opens,
+  -- since codecompanion sets its own window options then.
+  for opt, value in pairs({ wrap = true, linebreak = true, number = false, relativenumber = false, signcolumn = "no", foldcolumn = "0" }) do
+    vim.wo[S.wins.transcript][opt] = value
   end
   if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_win_get_buf(S.wins.transcript) ~= placeholder then
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
