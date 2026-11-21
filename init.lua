@@ -20,7 +20,7 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 local utils = require("utils")
-local expected_version = "0.12.1"
+local expected_version = "0.12.0"
 utils.is_compatible_version(expected_version)
 
 local config_dir = vim.fn.stdpath("config")

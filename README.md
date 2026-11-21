@@ -82,7 +82,7 @@ For web pages, `:live` serves the folder of the current HTML or JS file on local
 
 ## What you need
 
-- Neovim 0.12, plus kitty for the animated bonsai. Elsewhere, the status line shows just the words.
+- Neovim 0.12 or newer, plus kitty for the animated bonsai. Elsewhere, the status line shows just the words.
 - For the agent: the [bonsai](https://github.com/SinaEsmaeili1/bonsai) scripts, PrismML's [Ternary Bonsai 2 27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) model, bubblewrap, and optionally SearXNG and markitdown for web search. The model isn't in this repo; download the GGUF from Hugging Face.
 
 ## Built with
