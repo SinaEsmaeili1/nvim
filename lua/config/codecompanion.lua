@@ -55,6 +55,8 @@ end
 
 function M.opts()
   return {
+    -- The chat is drawn inside Bonsai's own panel (bonsai.ui), in the window it is given.
+    display = { chat = { window = { layout = "buffer" } } },
     -- Only a project's own AGENTS.md or .rules reach Bonsai, never
     -- ~/.claude/CLAUDE.md or other Claude-specific files (owner, 2026-11-21).
     -- They'd use up its 16-32K context and aren't written for it.

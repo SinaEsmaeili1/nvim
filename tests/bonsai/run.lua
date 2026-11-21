@@ -172,9 +172,11 @@ test("only the project's AGENTS.md and .rules, and the notes index, are attached
 end)
 
 -- Added 2026-11-21 (owner): Ctrl+A in normal mode opens or closes the chat.
+-- Changed 2026-11-21: Ctrl+A now toggles the whole Bonsai layout (the owner
+-- approved the Claude Code-style layout), not codecompanion's own window.
 test("Ctrl+A in normal mode toggles the Bonsai chat; insert and command line keep theirs", function()
   local n = vim.fn.maparg("<C-a>", "n", false, true)
-  truthy(n.rhs and n.rhs:find("CodeCompanionChat Toggle", 1, true), "normal-mode Ctrl+A: " .. vim.inspect(n.rhs))
+  truthy(n.rhs and n.rhs:find("require('bonsai.ui').toggle()", 1, true), "normal-mode Ctrl+A: " .. vim.inspect(n.rhs))
   -- Neovim reports the key as <Home>; the config writes <HOME>. Same key.
   eq(vim.fn.maparg("<C-a>", "i"):lower(), "<home>", "insert-mode Ctrl+A")
   eq(vim.fn.maparg("<C-a>", "c"):lower(), "<home>", "command-line Ctrl+A")
@@ -393,6 +395,169 @@ test("a SearXNG error, a non-JSON answer or no results come back as clear errors
   local none = cb(sx, { status = 200, body = vim.json.encode({ results = {} }) })
   eq(none.status, "error", "no results")
   eq(none.content, "No results found", "no-results message")
+end)
+
+-- ---- the Claude Code-style layout, the animated logo and plant words (owner, 2026-11-21: "approaved") ----
+
+test("plant words: each state's pool is the agreed list", function()
+  local words = require("bonsai.ui.words")
+  eq(words.POOLS.thinking, { "Photosynthesizing", "Germinating", "Sprouting", "Taking root", "Budding", "Pollinating", "Composting" }, "thinking")
+  eq(words.POOLS.working, { "Pruning", "Repotting", "Grafting", "Wiring branches", "Weeding", "Mulching", "Watering" }, "working")
+  eq(words.POOLS.speaking, { "Blossoming", "Unfurling", "Leafing out", "Branching out", "Flowering" }, "speaking")
+  eq(words.POOLS.listening, { "Soaking it in", "Drinking it in", "Rooting around" }, "listening")
+  eq(words.POOLS.success, { "In full bloom", "Harvested", "Bore fruit" }, "success")
+  for state, pool in pairs(words.POOLS) do
+    for i = 1, 20 do truthy(vim.tbl_contains(pool, words.pick(state)), state .. " pick") end
+  end
+end)
+
+test("the status line reads like Claude Code's, with plant words", function()
+  local status = require("bonsai.ui.status")
+  eq(status.format({ state = "thinking", word = "Photosynthesizing", elapsed = 12, tokens = 1234, effort = "high", thinking = true }),
+    "Photosynthesizing… (12s · ↓ ~1.2k tokens · thinking with high effort)", "thinking")
+  eq(status.format({ state = "speaking", word = "Blossoming", elapsed = 65, tokens = 850, effort = "medium", thinking = false }),
+    "Blossoming… (1m 5s · ↓ ~850 tokens · medium effort)", "speaking")
+  eq(status.format({ state = "success", word = "In full bloom", elapsed = 14, tokens = 2300, effort = "high", thinking = true }),
+    "In full bloom ✓ (14s · ↓ ~2.3k tokens · thinking with high effort)", "success")
+  eq(status.format({ state = "listening", word = "Soaking it in" }), "Soaking it in…", "listening")
+  eq(status.format({ state = "idle", effort = "medium" }), "Ready · /effort: medium", "idle")
+end)
+
+test("the animation follows what Bonsai is doing", function()
+  local status = require("bonsai.ui.status")
+  local now, timers, seen = 100, {}, {}
+  local m = status.new({
+    clock = function() return now end,
+    after = function(ms, fn) table.insert(timers, { ms = ms, fn = fn }) end,
+    on_change = function(state) table.insert(seen, state) end,
+  })
+  eq(m:state(), "idle", "starts idle")
+  m:event("InputChanged", { text = "hi" }); eq(m:state(), "listening", "typing")
+  m:event("InputChanged", { text = "" }); eq(m:state(), "idle", "cleared input")
+  m:event("ChatSubmitted"); eq(m:state(), "thinking", "submitted")
+  now = 103
+  m:event("RequestStreaming"); eq(m:state(), "speaking", "streaming")
+  m:event("ToolStarted"); eq(m:state(), "working", "tool")
+  m:event("ToolApprovalRequested"); eq(m:state(), "listening", "approval asked")
+  m:event("ToolApprovalFinished"); eq(m:state(), "working", "approved")
+  m:event("ToolFinished"); eq(m:state(), "thinking", "tool done")
+  now = 112
+  eq(m:elapsed(), 12, "seconds since the message was sent")
+  m:event("ChatDone"); eq(m:state(), "success", "done")
+  eq(timers[#timers].ms, 3840, "success plays once: 48 frames x 80 ms")
+  timers[#timers].fn(); eq(m:state(), "idle", "then idle")
+  m:event("ChatSubmitted"); m:event("ChatStopped"); eq(m:state(), "idle", "stopped")
+  truthy(#seen > 5, "changes reported")
+end)
+
+test("kitty uploads each state once and loops it itself", function()
+  local kitty = require("bonsai.ui.kitty")
+  local files = kitty.frames("thinking")
+  eq(#files, 48, "frames")
+  local id = kitty.image_id("thinking")
+  local cmds = kitty.upload_commands("thinking", files)
+  eq(#cmds, 50, "1 + 47 frames + gap + start")
+  local function has(cmd, ...) for _, k in ipairs({ ... }) do if not cmd:find(k, 1, true) then return false end end return true end
+  truthy(cmds[1]:sub(1, 3) == "\27_G" and has(cmds[1], "a=t", "f=100", "t=f", "i=" .. id, "q=2"), "first frame: " .. cmds[1]:sub(1, 60))
+  truthy(cmds[1]:find(vim.base64.encode(files[1]), 1, true), "first frame is read from its file")
+  for i = 2, 48 do truthy(has(cmds[i], "a=f", "f=100", "t=f", "i=" .. id, "z=80"), "frame " .. i) end
+  truthy(has(cmds[49], "a=a", "i=" .. id, "r=1", "z=80"), "first frame's gap")
+  truthy(has(cmds[50], "a=a", "i=" .. id, "s=3", "v=1"), "loops forever")
+  local once = kitty.upload_commands("success", kitty.frames("success"))
+  truthy(has(once[50], "s=3", "v=2"), "success plays once")
+end)
+
+test("the logo sits in text cells as kitty placeholders, 4 wide and 2 tall", function()
+  local kitty = require("bonsai.ui.kitty")
+  local id = kitty.image_id("idle")
+  eq(kitty.hl_color(id), ("#%06x"):format(id), "the colour carries the image id")
+  local lines = kitty.placeholder_lines(4, 2)
+  eq(#lines, 2, "rows")
+  local p, d = "\u{10EEEE}", { "\u{0305}", "\u{030D}", "\u{030E}", "\u{0310}" }
+  eq(lines[1], p .. d[1] .. d[1] .. p .. d[1] .. d[2] .. p .. d[1] .. d[3] .. p .. d[1] .. d[4], "row 1")
+  eq(lines[2], p .. d[2] .. d[1] .. p .. d[2] .. d[2] .. p .. d[2] .. d[3] .. p .. d[2] .. d[4], "row 2")
+  truthy(kitty.placement_command(id, 4, 2):find("a=p,U=1,i=" .. id .. ",c=4,r=2", 1, true), "virtual placement")
+end)
+
+test("all 288 frames are in the config's assets", function()
+  local kitty = require("bonsai.ui.kitty")
+  local total = 0
+  for _, state in ipairs(kitty.STATES) do
+    for _, f in ipairs(kitty.frames(state)) do truthy(vim.uv.fs_stat(f), f); total = total + 1 end
+  end
+  eq(total, 288, "frames")
+end)
+
+-- A stand-in chat, so the layout can be tested without a model.
+local made = {}
+local function fake_chat()
+  local chat = { bufnr = vim.api.nvim_create_buf(false, true), sent = {}, submitted = 0 }
+  function chat:add_buf_message(msg) table.insert(self.sent, msg) end
+  function chat:submit() self.submitted = self.submitted + 1 end
+  table.insert(made, chat)
+  return chat
+end
+
+test("the layout: transcript, status line with the logo, and an input box with the hints", function()
+  local ui = require("bonsai.ui")
+  ui.set_chat_factory(function(win) local c = fake_chat(); vim.api.nvim_win_set_buf(win, c.bufnr); return c end)
+  ui.open()
+  local w = ui.windows()
+  for _, name in ipairs({ "transcript", "status", "input" }) do truthy(w[name] and vim.api.nvim_win_is_valid(w[name]), name) end
+  local t = vim.api.nvim_win_get_config(w.transcript)
+  truthy(vim.inspect(t.title):find("Bonsai", 1, true) and vim.inspect(t.title):find("effort", 1, true), "title: " .. vim.inspect(t.title))
+  eq(vim.api.nvim_win_get_buf(w.transcript), made[#made].bufnr, "the chat is in the transcript window")
+  eq(vim.api.nvim_win_get_height(w.status), 2, "status is 2 lines (the logo's height)")
+  local i = vim.api.nvim_win_get_config(w.input)
+  truthy(vim.inspect(i.footer):find("Ctrl+A", 1, true) and vim.inspect(i.footer):find("/effort", 1, true), "hints: " .. vim.inspect(i.footer))
+  eq(vim.api.nvim_get_current_win(), w.input, "the cursor starts in the input box")
+end)
+
+test("Ctrl+A hides the layout and brings back the same chat", function()
+  local ui = require("bonsai.ui")
+  local chat = made[#made]
+  ui.toggle(); eq(ui.is_open(), false, "hidden")
+  ui.toggle(); eq(ui.is_open(), true, "shown")
+  eq(vim.api.nvim_win_get_buf(ui.windows().transcript), chat.bufnr, "same chat")
+end)
+
+test("the input box sends messages to the chat, and handles /effort and /clear", function()
+  local ui = require("bonsai.ui")
+  local effort = require("bonsai.effort")
+  local chat = made[#made]
+  ui.submit("fix the off-by-one @{agent}")
+  eq(chat.sent[#chat.sent], { role = "user", content = "fix the off-by-one @{agent}" }, "message")
+  eq(chat.submitted, 1, "submitted")
+  local picked, orig = false, effort.pick
+  effort.pick = function() picked = true end
+  ui.submit("/effort")
+  effort.pick = orig
+  eq(picked, true, "/effort opens the picker")
+  eq(chat.submitted, 1, "/effort is not sent to Bonsai")
+  local before = #made
+  ui.submit("/clear")
+  eq(#made, before + 1, "/clear starts a new chat")
+end)
+
+test("a tool waiting for approval moves the cursor to the transcript, then back", function()
+  local ui = require("bonsai.ui")
+  vim.api.nvim_exec_autocmds("User", { pattern = "CodeCompanionToolApprovalRequested", data = {} })
+  eq(vim.api.nvim_get_current_win(), ui.windows().transcript, "to the prompt")
+  vim.api.nvim_exec_autocmds("User", { pattern = "CodeCompanionToolApprovalFinished", data = {} })
+  eq(vim.api.nvim_get_current_win(), ui.windows().input, "back to the input box")
+  ui.close()
+end)
+
+test("the terminal agent opens full-screen, and asks for a project folder when started in home", function()
+  local ui = require("bonsai.ui")
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  ui.open({ fullscreen = true })
+  truthy(vim.api.nvim_win_get_width(ui.windows().transcript) >= vim.o.columns - 2, "full width")
+  ui.close()
+  local history = vim.fn.tempname()
+  vim.fn.writefile({ project, real_home, "/does/not/exist" }, history)
+  eq(ui.project_choices(history), { project }, "existing folders only, never home")
 end)
 
 -- ---- plugin list ----

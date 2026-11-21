@@ -1,0 +1,33 @@
+{
+  "image": "bonsai-atlas.png",
+  "frameWidth": 112,
+  "frameHeight": 112,
+  "columns": 12,
+  "frameDurationMs": 80,
+  "states": {
+    "idle": {
+      "firstFrame": 0,
+      "frameCount": 48
+    },
+    "listening": {
+      "firstFrame": 48,
+      "frameCount": 48
+    },
+    "thinking": {
+      "firstFrame": 96,
+      "frameCount": 48
+    },
+    "working": {
+      "firstFrame": 144,
+      "frameCount": 48
+    },
+    "speaking": {
+      "firstFrame": 192,
+      "frameCount": 48
+    },
+    "success": {
+      "firstFrame": 240,
+      "frameCount": 48
+    }
+  }
+}

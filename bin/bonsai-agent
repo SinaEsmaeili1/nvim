@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Bonsai as a terminal coding agent: the same agent as in Neovim (sandbox,
+# approvals, SearXNG search, Markdown rules, /effort), full-screen in the
+# terminal, in a Claude Code-style layout. Run it inside a project folder; started
+# from home (the app menu), it asks which project to open.
+# It starts Bonsai (bonsai-serve) at the saved effort if it isn't running.
+exec nvim -c "lua require('bonsai.ui').agent_mode()" "$@"

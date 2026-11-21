@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Bonsai Agent
+Comment=Bonsai as a local coding agent in the terminal: sandboxed to one project, every edit, command and website asks first
+Exec=kitty --class bonsai-agent --title "Bonsai" /home/el/.local/bin/bonsai-agent
+Icon=/home/el/.config/nvim/assets/bonsai/icon.png
+Terminal=false
+Categories=Development;
+StartupWMClass=bonsai-agent
+NoDisplay=false

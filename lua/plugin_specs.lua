@@ -732,14 +732,12 @@ local plugin_specs = {
       "nvim-treesitter/nvim-treesitter",
     },
     cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions", "CodeCompanionCmd" },
-    keys = {
-      -- Ctrl+A opens or closes the Bonsai chat (owner, 2026-11-21). Normal mode
-      -- only: insert and command-line Ctrl+A still go to the start of the line.
-      { "<C-a>", "<cmd>CodeCompanionChat Toggle<cr>", mode = "n", desc = "Bonsai chat" },
-    },
     init = function()
       -- Bonsai's sandbox is the folder Neovim was opened in (bonsai.sandbox).
       vim.g.bonsai_root = vim.uv.cwd()
+      -- Ctrl+A opens or closes Bonsai's Claude Code-style panel (bonsai.ui).
+      -- Normal mode only: insert and command-line Ctrl+A still go to the start of the line.
+      vim.keymap.set("n", "<C-a>", "<cmd>lua require('bonsai.ui').toggle()<cr>", { desc = "Bonsai chat" })
     end,
     config = function()
       require("config.codecompanion").setup()
