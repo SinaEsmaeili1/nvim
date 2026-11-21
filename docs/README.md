@@ -115,7 +115,7 @@ Git is required by plugin manager [lazy.nvim](https://github.com/folke/lazy.nvim
 
 For Linux and macOS, Git is usually pre-installed.
 The version of Git on the Linux system may be too old so that plugins may break.
-Check [here](https://jdhao.github.io/2021/03/27/upgrade_git_on_linux/) on how to install and set up the latest version of Git.
+If yours is old, install the latest Git from your package manager or from [git-scm.com](https://git-scm.com/downloads).
 For Windows, install [Git for Windows](https://git-scm.com/download/win) and make sure you can run `git` from command line.
 
 ### universal-ctags
@@ -183,7 +183,7 @@ First, we need to remove all the files under the config directory (including dot
 then go to this directory, and run the following command:
 
 ```
-git clone --depth=1 https://github.com/jdhao/nvim-config.git .
+git clone --depth=1 https://github.com/SinaEsmaeili1/nvim.git .
 ```
 
 After that, when we first open nvim, all the plugins will be installed automatically.
