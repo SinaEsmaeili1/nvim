@@ -330,6 +330,34 @@ test("file tools refuse paths outside the project", function()
   end
 end)
 
+-- Contract: NEOVIM-AGENT.md, Addendum 8, G5 (found by the independent review).
+test("a link that leads nowhere isn't inside the project, so the file tools refuse it", function()
+  local sandbox = require("bonsai.sandbox")
+  sandbox.set_root(project)
+  local target = outside .. "/made-by-create_file.txt"
+  vim.uv.fs_symlink(target, project .. "/dangling")
+  local inside = sandbox.inside(project .. "/dangling")
+  local got
+  local ok, err = pcall(
+    require("bonsai.tools.create_file").cmds[1],
+    nil,
+    { filepath = project .. "/dangling", content = "x" },
+    {
+      output_cb = function(o)
+        got = o
+      end,
+    }
+  )
+  vim.wait(1000, function()
+    return got ~= nil
+  end)
+  vim.uv.fs_unlink(project .. "/dangling")
+  eq(inside, false, "inside")
+  assert(ok, err)
+  eq(got and got.status, "error", "create_file status")
+  eq(vim.uv.fs_stat(target), nil, "a file written outside")
+end)
+
 test("the chat uses the sandboxed tools", function()
   local tools = cc.opts().interactions.chat.tools
   for _, name in ipairs {
@@ -583,6 +611,196 @@ test("reading notes is free; every write to them asks first", function()
   end
   eq(ask { args = {} }, true, "unknown asks")
 end)
+
+-- ---- the memory tool stays in its two folders (owner, 2026-11-21: Bonsai "can't access a
+-- higher working directory than it's launched from"; contract: NEOVIM-AGENT.md, Addendum 8) ----
+
+local memories = project .. "/memories"
+vim.fn.mkdir(memories, "p")
+write_file(memories .. "/plan.md", "the plan\n")
+write_file(outside .. "/secret.txt", "outside the project\n")
+vim.uv.fs_symlink(outside, memories .. "/link")
+vim.fn.mkdir(project .. "/memories-x", "p")
+write_file(project .. "/memories-x/note.md", "a sibling folder\n")
+
+-- Calls Bonsai's memory tool the way codecompanion's runner does, with the
+-- chat's whitelist, and returns what it reports.
+local function call_memory(args)
+  local tool = require("bonsai.tools.memory")
+  local chat_tools = { tool = { opts = { whitelist = { { path = rules, as = "/rules" } } } } }
+  local got
+  local returned = tool.cmds[1](chat_tools, args, {
+    output_cb = function(o)
+      got = o
+    end,
+    register_job = function() end,
+  })
+  return returned or got
+end
+
+-- Runs fn in the project, which is also the folder Neovim was opened in.
+local function in_project(fn)
+  require("bonsai.sandbox").set_root(project)
+  in_dir(project, fn)
+end
+
+test("the chat's memory tool is Bonsai's, which checks its paths on disk", function()
+  eq(cc.opts().interactions.chat.tools.memory.path, "bonsai.tools.memory", "memory tool")
+end)
+
+test("memories and notes can still be read and changed inside their folders", function()
+  write_file(rules .. "/style.md", "a note\n")
+  in_project(function()
+    local r = call_memory { command = "view", path = "/memories/plan.md" }
+    eq(r.status, "success", "view a memory")
+    truthy(r.data:find("the plan", 1, true), "the memory's text")
+    eq(call_memory({ command = "view", path = "/memories" }).status, "success", "list memories")
+    eq(
+      call_memory({ command = "create", path = "/memories/new.md", file_text = "new\n" }).status,
+      "success",
+      "create"
+    )
+    eq(
+      call_memory({
+        command = "rename",
+        old_path = "/memories/new.md",
+        new_path = "/memories/old.md",
+      }).status,
+      "success",
+      "rename"
+    )
+    eq(call_memory({ command = "delete", path = "/memories/old.md" }).status, "success", "delete")
+    r = call_memory { command = "view", path = "/rules/style.md" }
+    eq(r.status, "success", "view a note")
+    truthy(r.data:find("a note", 1, true), "the note's text")
+    eq(
+      call_memory({
+        command = "str_replace",
+        path = "/rules/style.md",
+        old_str = "a note",
+        new_str = "a new note",
+      }).status,
+      "success",
+      "str_replace"
+    )
+    eq(
+      call_memory({
+        command = "insert",
+        path = "/rules/style.md",
+        insert_line = 1,
+        insert_text = "top",
+      }).status,
+      "success",
+      "insert"
+    )
+  end)
+end)
+
+test("a link inside memories/ or the rules folder can't lead outside them", function()
+  vim.uv.fs_symlink(outside, rules .. "/link")
+  local results_seen = {}
+  in_project(function()
+    for _, path in ipairs { "/memories/link/secret.txt", "/memories/link", "/rules/link/secret.txt" } do
+      results_seen[path] = call_memory { command = "view", path = path }
+    end
+    results_seen.create =
+      call_memory { command = "create", path = "/memories/link/made.md", file_text = "x" }
+  end)
+  vim.uv.fs_unlink(rules .. "/link")
+  for what, r in pairs(results_seen) do
+    eq(r.status, "error", what)
+    truthy(
+      not tostring(r.data):find("outside the project", 1, true),
+      what .. " showed the outside file"
+    )
+  end
+  eq(vim.uv.fs_stat(outside .. "/made.md"), nil, "a file written outside")
+end)
+
+test(
+  "a folder next to memories/ or the rules folder whose name starts the same is refused",
+  function()
+    local sibling = vim.fs.basename(rules) .. "-x"
+    local r1, r2
+    in_project(function()
+      r1 = call_memory { command = "view", path = "/memories/../memories-x/note.md" }
+      r2 = call_memory {
+        command = "create",
+        path = "/rules/../" .. sibling .. "/new.md",
+        file_text = "x",
+      }
+    end)
+    eq(r1.status, "error", "memories-x")
+    eq(r2.status, "error", "a folder next to the rules folder")
+    eq(vim.uv.fs_stat(rules .. "-x"), nil, "the folder made next to the rules folder")
+  end
+)
+
+test("rename can't move a memory out through a link", function()
+  local r
+  in_project(function()
+    r = call_memory {
+      command = "rename",
+      old_path = "/memories/plan.md",
+      new_path = "/memories/link/plan.md",
+    }
+  end)
+  eq(r.status, "error", "rename")
+  truthy(vim.uv.fs_stat(memories .. "/plan.md"), "the memory is still in memories/")
+  eq(vim.uv.fs_stat(outside .. "/plan.md"), nil, "a memory moved outside")
+end)
+
+test(
+  "creating a memory through a link that leads nowhere is refused, and nothing lands outside",
+  function()
+    local target = outside .. "/made-by-memory.txt"
+    vim.uv.fs_symlink(target, memories .. "/dangling")
+    local r
+    in_project(function()
+      r = call_memory { command = "create", path = "/memories/dangling", file_text = "x" }
+    end)
+    vim.uv.fs_unlink(memories .. "/dangling")
+    eq(r.status, "error", "create")
+    eq(vim.uv.fs_stat(target), nil, "a file written outside")
+  end
+)
+
+test(
+  "a memories folder that is a link is refused, and Bonsai's list of memories stays empty",
+  function()
+    local linked = vim.fn.tempname() .. "-linked"
+    vim.fn.mkdir(linked, "p")
+    linked = vim.uv.fs_realpath(linked)
+    vim.uv.fs_symlink(outside, linked .. "/memories")
+    local sandbox = require("bonsai.sandbox")
+    local r, prompt
+    sandbox.set_root(linked)
+    local ok, err = pcall(in_dir, linked, function()
+      r = call_memory { command = "view", path = "/memories/secret.txt" }
+      prompt = require("codecompanion.memory").get_prompt()
+    end)
+    sandbox.set_root(project)
+    assert(ok, err)
+    eq(r.status, "error", "view through the linked folder")
+    truthy(not prompt:find("secret.txt", 1, true), "the outside file's name is in Bonsai's prompt")
+  end
+)
+
+test(
+  "when Neovim has moved to another folder, /memories is refused and /rules still works",
+  function()
+    vim.fn.mkdir(project .. "/src/memories", "p")
+    write_file(project .. "/src/memories/other.md", "another folder\n")
+    require("bonsai.sandbox").set_root(project)
+    local r1, r2
+    in_dir(project .. "/src", function()
+      r1 = call_memory { command = "view", path = "/memories/other.md" }
+      r2 = call_memory { command = "view", path = "/rules/style.md" }
+    end)
+    eq(r1.status, "error", "/memories from another folder")
+    eq(r2.status, "success", "/rules")
+  end
+)
 
 test("only the memory tool is on by default; others are added per task", function()
   eq(cc.opts().interactions.chat.tools.opts.default_tools, { "memory" }, "default tools")

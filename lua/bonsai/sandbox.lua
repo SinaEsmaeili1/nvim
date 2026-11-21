@@ -29,6 +29,8 @@ end
 
 -- The real path, resolved one part at a time, so a symlink is followed
 -- before any ".." after it (text-only clean-up would let "link/../x" escape).
+-- A link that leads nowhere gives nil: a file made through it would land
+-- wherever it points (NEOVIM-AGENT.md, Addendum 8, G5).
 local function resolve(path)
   local cur = "/"
   for part in path:gmatch("[^/]+") do
@@ -36,11 +38,22 @@ local function resolve(path)
       cur = vim.fs.dirname(cur) or "/"
     elseif part ~= "." then
       local next_path = (cur == "/" and "" or cur) .. "/" .. part
-      cur = vim.uv.fs_realpath(next_path) or next_path
+      local real = vim.uv.fs_realpath(next_path)
+      if not real then
+        local stat = vim.uv.fs_lstat(next_path)
+        if stat and stat.type == "link" then
+          return nil
+        end
+      end
+      cur = real or next_path
     end
   end
   return cur
 end
+
+-- The memory tool's guard resolves its paths the same way (bonsai.tools.memory).
+-- It returns nil for a link that leads nowhere, so callers must handle nil.
+M.resolve = resolve
 
 function M.inside(path)
   local root = M.root()
@@ -50,7 +63,7 @@ function M.inside(path)
     path = root .. "/" .. path
   end
   local real = resolve(path)
-  return real == root or real:sub(1, #root + 1) == root .. "/"
+  return real ~= nil and (real == root or real:sub(1, #root + 1) == root .. "/")
 end
 
 -- Why tools that work in Neovim's current folder must not run now, or nil.

@@ -128,8 +128,11 @@ function M.opts()
             -- is on by default; add others per task (for example @{agent}).
             default_tools = { "memory" },
           },
-          -- Bonsai's notes, as /rules. Reading is free; every write asks first.
+          -- Bonsai's notes, as /rules. Reading is free; every write asks first. Its
+          -- paths are checked on disk, so a link can't lead out of memories/ or the
+          -- rules folder (bonsai.tools.memory).
           ["memory"] = {
+            path = "bonsai.tools.memory",
             opts = {
               whitelist = { { path = notes.rules_dir(), as = "/rules" } },
               require_approval_before = function(tool)

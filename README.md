@@ -34,6 +34,7 @@ Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Cl
 - Commands run inside bubblewrap. Only the project folder is writable, the rest of my home folder is hidden, there's no network, and nothing can escalate (no `sudo`).
 - The file tools refuse any path outside the project, and symlinks are resolved so they can't sneak out. A call that doesn't name its path is refused too.
 - Search, git and diagnostics are held to the project as well: they run only while Neovim's current folder is inside it.
+- The memory tool reaches only the project's `memories` folder and Bonsai's notes folder, and it resolves symlinks the same way.
 - Opened in `~` or `/`, the tools stay off. The folder is too wide to be a project.
 
 </details>
