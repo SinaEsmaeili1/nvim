@@ -45,6 +45,7 @@ require("templates")
 require("mappings")
 require("diagnostic-conf")
 require("folders").setup() -- remember opened folders for "Recently opened folders"
+require("live_server").setup() -- :Live / :live, a live server for the current folder
 
 local color_scheme = require("colorschemes")
 color_scheme.rand_colorscheme()
