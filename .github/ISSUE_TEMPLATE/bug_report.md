@@ -6,12 +6,12 @@ labels: ''
 assignees: ''
 ---
 
-<!-- Before reporting: make sure that you have read the doc (https://github.com/jdhao/nvim-config/tree/master/docs) and searched existing issues. -->
+<!-- Before reporting: make sure that you have read the doc (https://github.com/SinaEsmaeili1/nvim/tree/main/docs) and searched existing issues. -->
 
 - `nvim --version`: <!--should be latest stable version: https://github.com/neovim/neovim/releases/tag/stable -->
 - terminal emulator and version:
 - Operating system/version:
-- Have you read and followed all steps in the [doc](https://github.com/jdhao/nvim-config/tree/master/docs):
+- Have you read and followed all steps in the [doc](https://github.com/SinaEsmaeili1/nvim/tree/main/docs):
 - Output of command `set runtimepath`:
 
   <!-- paste your runtimepath below --->

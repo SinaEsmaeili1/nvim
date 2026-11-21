@@ -296,8 +296,7 @@ local plugin_specs = {
         let g:UltiSnipsJumpForwardTrigger='<c-j>'
         let g:UltiSnipsJumpBackwardTrigger='<c-k>'
 
-        " Configuration for custom snippets directory, see
-        " https://jdhao.github.io/2019/04/17/neovim_snippet_s1/ for details.
+        " My own snippets live in my_snippets.
         let g:UltiSnipsSnippetDirectories=['UltiSnips', 'my_snippets']
       ]])
     end,
@@ -471,8 +470,7 @@ local plugin_specs = {
     init = function()
       vim.cmd([[
         if executable('latex')
-          " Hacks for inverse search to work semi-automatically,
-          " see https://jdhao.github.io/2021/02/20/inverse_search_setup_neovim_vimtex/.
+          " Hacks for inverse search to work semi-automatically.
           function! s:write_server_name() abort
             let nvim_server_file = (has('win32') ? $TEMP : '/tmp') . '/vimtexserver.txt'
             call writefile([v:servername], nvim_server_file)
