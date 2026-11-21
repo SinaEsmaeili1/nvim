@@ -81,8 +81,10 @@ dashboard.setup {
 api.nvim_create_autocmd("FileType", {
   pattern = "dashboard",
   group = api.nvim_create_augroup("dashboard_enter", { clear = true }),
-  callback = function()
+  callback = function(args)
     keymap.set("n", "q", ":qa<CR>", { buffer = true, silent = true })
     keymap.set("n", "e", ":enew<CR>", { buffer = true, silent = true })
+    -- No indent guide here: mini.indentscope would draw a line down the menu.
+    vim.b[args.buf].miniindentscope_disable = true
   end,
 })

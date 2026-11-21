@@ -391,6 +391,21 @@ test("a small window shows the menu without an art", function()
   eq(header, {}, "header")
 end)
 
+-- Owner, 2026-11-21: the indent guide's line down the menu ("i don't want this").
+test("the start menu has no indent guide, and keeps its q and e keys", function()
+  menu_config() -- loads the menu file, which sets up what a start menu buffer gets
+  local before = vim.api.nvim_get_current_buf()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_current_buf(buf)
+  vim.bo[buf].filetype = "dashboard"
+  local disabled = vim.b[buf].miniindentscope_disable
+  local q, e = vim.fn.maparg("q", "n", false, true), vim.fn.maparg("e", "n", false, true)
+  vim.api.nvim_set_current_buf(before)
+  vim.api.nvim_buf_delete(buf, { force = true })
+  eq(disabled, true, "mini.indentscope switched off for the start menu")
+  eq({ q.buffer, e.buffer }, { 1, 1 }, "q and e are the start menu's own keys")
+end)
+
 -- Last, since agent mode stays on for the rest of the session.
 test("the bonsai-agent app still opens full screen and starts Bonsai when it's down", function()
   set_level_file("medium")
