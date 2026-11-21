@@ -724,21 +724,21 @@ local plugin_specs = {
     },
   },
   {
-    "CopilotC-Nvim/CopilotChat.nvim",
+    -- Bonsai (local, via bonsai-serve) as a coding agent. Replaced Copilot on
+    -- 2026-11-21. Settings: lua/config/codecompanion.lua.
+    "olimorris/codecompanion.nvim",
     dependencies = {
-      { "zbirenbaum/copilot.lua" }, -- or github/copilot.vim
+      "nvim-lua/plenary.nvim",
+      "nvim-treesitter/nvim-treesitter",
     },
-    opts = {
-      debug = true, -- Enable debugging
-      -- See Configuration section for rest
+    cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions", "CodeCompanionCmd" },
+    keys = {
+      -- Ctrl+A opens or closes the Bonsai chat (owner, 2026-11-21). Normal mode
+      -- only: insert and command-line Ctrl+A still go to the start of the line.
+      { "<C-a>", "<cmd>CodeCompanionChat Toggle<cr>", mode = "n", desc = "Bonsai chat" },
     },
-    cmd = { "CopilotChat" },
-  },
-  {
-    "zbirenbaum/copilot.lua",
-    cmd = "Copilot",
     config = function()
-      require("copilot").setup {}
+      require("config.codecompanion").setup()
     end,
   },
   {
