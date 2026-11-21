@@ -157,11 +157,18 @@ end)
 
 -- Added 2026-11-21 (owner): Bonsai sees only a project's own AGENTS.md / .rules,
 -- never ~/.claude/CLAUDE.md or other Claude-specific files.
-test("only the project's AGENTS.md and .rules are attached to chats", function()
+-- Changed 2026-11-21: the owner then chose global rules, so the index of
+-- Bonsai's notes (INDEX.md only) is attached too. Still never ~/.claude/CLAUDE.md.
+test("only the project's AGENTS.md and .rules, and the notes index, are attached to chats", function()
   local opts = cc.opts()
   eq(opts.rules.opts.chat.autoload, "bonsai", "autoloaded group")
   local files = vim.tbl_map(function(f) return type(f) == "table" and f.path or f end, opts.rules.bonsai.files)
-  eq(files, { "AGENTS.md", ".rules" }, "files")
+  eq({ files[1], files[2] }, { "AGENTS.md", ".rules" }, "project files")
+  eq(#files, 3, "nothing else")
+  eq(opts.rules.bonsai.files[3].files, "INDEX.md", "only the notes index")
+  for _, f in ipairs(files) do
+    eq(tostring(f):find("CLAUDE", 1, true), nil, "no CLAUDE.md")
+  end
 end)
 
 -- Added 2026-11-21 (owner): Ctrl+A in normal mode opens or closes the chat.
@@ -289,6 +296,68 @@ test("web search and page fetches wait for approval", function()
   eq(tools.web_search.opts.require_approval_before, true, "web_search")
   eq(tools.fetch_webpage.opts.require_approval_before, true, "fetch_webpage")
   eq(tools.fetch_webpage.opts.adapter, "markitdown", "pages are read locally, never through a third party")
+end)
+
+-- ---- Markdown-driven notes (owner, 2026-11-21: global rules; "markdown driven
+-- rather than context driven for efficiency"; "as less context dependent as possible") ----
+
+local rules = vim.fn.tempname() .. "-rules"
+vim.env.BONSAI_RULES = rules
+
+test("only the global rules index is loaded into each chat, besides the project's AGENTS.md", function()
+  local files = cc.opts().rules.bonsai.files
+  local index
+  for _, f in ipairs(files) do
+    if type(f) == "table" and f.files == "INDEX.md" then index = f end
+  end
+  truthy(index, "INDEX.md entry")
+  eq(index.path, rules, "rules folder")
+end)
+
+test("the index is created with how-to lines if missing, and never overwritten", function()
+  local notes = require("bonsai.notes")
+  vim.fn.delete(rules, "rf")
+  notes.ensure_index()
+  local text = table.concat(vim.fn.readfile(rules .. "/INDEX.md"), "\n")
+  truthy(text:find("/rules/", 1, true), "explains where rules go")
+  truthy(text:find("Why:", 1, true), "asks for a Why: line")
+  vim.fn.writefile({ "# mine" }, rules .. "/INDEX.md")
+  notes.ensure_index()
+  eq(vim.fn.readfile(rules .. "/INDEX.md"), { "# mine" }, "kept as it was")
+end)
+
+test("Bonsai's memory tool reaches the rules folder as /rules and is on in every chat", function()
+  local tools = cc.opts().interactions.chat.tools
+  eq(tools.memory.opts.whitelist, { { path = rules, as = "/rules" } }, "whitelist")
+  truthy(vim.tbl_contains(tools.opts.default_tools, "memory"), "default tool")
+end)
+
+test("reading notes is free; every write to them asks first", function()
+  local ask = cc.opts().interactions.chat.tools.memory.opts.require_approval_before
+  eq(type(ask), "function", "decided per call")
+  eq(ask({ args = { command = "view", path = "/rules" } }), false, "view")
+  for _, command in ipairs({ "create", "str_replace", "insert", "delete", "rename" }) do
+    eq(ask({ args = { command = command, path = "/rules/x.md" } }), true, command)
+  end
+  eq(ask({ args = {} }), true, "unknown asks")
+end)
+
+test("only the memory tool is on by default; others are added per task", function()
+  eq(cc.opts().interactions.chat.tools.opts.default_tools, { "memory" }, "default tools")
+end)
+
+test("the context size follows the effort level", function()
+  local shared = require("codecompanion.adapters.shared")
+  set_level_file("low")
+  eq(shared.context_window(cc.opts().adapters.http.bonsai()), 16384, "low")
+  set_level_file("high")
+  eq(shared.context_window(cc.opts().adapters.http.bonsai()), 65536, "high")
+end)
+
+test("old tool output is trimmed early, and long chats are summarised early", function()
+  local cm = cc.opts().interactions.chat.opts.context_management
+  eq(cm.editing.trigger, 0.5, "editing")
+  eq(cm.compaction.trigger, 0.7, "compaction")
 end)
 
 -- ---- plugin list ----

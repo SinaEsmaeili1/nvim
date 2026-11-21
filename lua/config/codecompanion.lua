@@ -3,6 +3,7 @@
 -- Bonsai runs locally (bonsai-serve, localhost:8089). Reading and searching
 -- are free; every edit and every shell command waits for my yes.
 local effort = require("bonsai.effort")
+local notes = require("bonsai.notes")
 
 local M = {}
 
@@ -36,8 +37,14 @@ local function bonsai_adapter()
     },
     schema = {
       -- llama-server serves one model whatever the name says, so the model
-      -- list is never asked for.
-      model = { default = "bonsai", choices = { "bonsai" } },
+      -- list is never asked for. Its context size is the effort level's, so
+      -- trimming and summarising (context_management) scale with /effort.
+      model = {
+        default = "bonsai",
+        choices = function()
+          return { bonsai = { formatted_name = "Bonsai", meta = { context_window = effort.current().ctx } } }
+        end,
+      },
     },
     handlers = {
       form_parameters = M.handlers.form_parameters,
@@ -57,6 +64,8 @@ function M.opts()
         files = {
           { path = "AGENTS.md", parser = "claude" },
           ".rules",
+          -- Only the index of Bonsai's global notes; notes are read on demand.
+          { path = notes.rules_dir(), files = "INDEX.md" },
         },
       },
       opts = { chat = { autoload = "bonsai" } },
@@ -79,9 +88,30 @@ function M.opts()
             opts = { contains_code = false },
           },
         },
+        opts = {
+          -- Keep chats small: trim old tool output at half the context, and
+          -- summarise the chat at 70% (the context is the effort level's).
+          context_management = {
+            editing = { trigger = 0.5 },
+            compaction = { trigger = 0.7 },
+          },
+        },
         tools = {
           opts = {
             approval_mode = "ask", -- never auto or yolo by default
+            -- Every tool's description costs context, so only the notes tool
+            -- is on by default; add others per task (for example @{agent}).
+            default_tools = { "memory" },
+          },
+          -- Bonsai's notes, as /rules. Reading is free; every write asks first.
+          ["memory"] = {
+            opts = {
+              whitelist = { { path = notes.rules_dir(), as = "/rules" } },
+              require_approval_before = function(tool)
+                local command = tool and tool.args and tool.args.command
+                return command ~= "view"
+              end,
+            },
           },
           ["run_command"] = {
             path = "bonsai.tools.run_command", -- runs inside the sandbox
@@ -112,6 +142,7 @@ function M.opts()
 end
 
 function M.setup()
+  notes.ensure_index()
   require("codecompanion").setup(M.opts())
 end
 
