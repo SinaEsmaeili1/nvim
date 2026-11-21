@@ -360,6 +360,41 @@ test("old tool output is trimmed early, and long chats are summarised early", fu
   eq(cm.compaction.trigger, 0.7, "compaction")
 end)
 
+-- ---- search through the owner's own SearXNG (owner, 2026-11-21: no search API) ----
+
+test("search goes to the local SearXNG only, as JSON", function()
+  local opts = cc.opts()
+  eq(opts.interactions.chat.tools.web_search.opts.adapter, "searxng", "adapter")
+  local sx = require("bonsai.searxng")
+  eq(sx.url, "http://127.0.0.1:8888/search?q=${query}&format=json", "url")
+  sx.methods.tools.web_search.setup(sx, {}, { query = "neovim lua & tests" })
+  eq(sx.env.query, vim.uri_encode("neovim lua & tests"), "query is encoded")
+end)
+
+test("SearXNG results become title, url and snippet, at most 8", function()
+  local sx = require("bonsai.searxng")
+  local results = {}
+  for i = 1, 12 do
+    table.insert(results, { title = "T" .. i, url = "https://example.com/" .. i, content = "snippet " .. i, engine = "x" })
+  end
+  local out = sx.methods.tools.web_search.callback(sx, { status = 200, body = vim.json.encode({ results = results }) })
+  eq(out.status, "success", "status")
+  eq(#out.content, 8, "count")
+  eq(out.content[1], { title = "T1", url = "https://example.com/1", content = "snippet 1" }, "first")
+end)
+
+test("a SearXNG error, a non-JSON answer or no results come back as clear errors", function()
+  local sx = require("bonsai.searxng")
+  local cb = sx.methods.tools.web_search.callback
+  local down = cb(sx, { status = 502, body = "" })
+  eq(down.status, "error", "502")
+  truthy(down.content:find("searxng", 1, true), "says how to check SearXNG")
+  eq(cb(sx, { status = 200, body = "<html>" }).status, "error", "not JSON")
+  local none = cb(sx, { status = 200, body = vim.json.encode({ results = {} }) })
+  eq(none.status, "error", "no results")
+  eq(none.content, "No results found", "no-results message")
+end)
+
 -- ---- plugin list ----
 
 test("Copilot is gone and codecompanion is in the plugin list", function()

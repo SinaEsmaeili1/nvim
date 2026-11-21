@@ -73,6 +73,10 @@ function M.opts()
     adapters = {
       http = {
         bonsai = bonsai_adapter,
+        -- Web search through the owner's own SearXNG (no API, no key).
+        searxng = function()
+          return require("bonsai.searxng")
+        end,
         opts = { show_presets = false },
       },
     },
@@ -123,7 +127,7 @@ function M.opts()
           },
           -- Every website needs the owner's approval first (owner, 2026-11-21).
           -- Pages are read locally with markitdown, never through a third party.
-          ["web_search"] = { opts = { require_approval_before = true } },
+          ["web_search"] = { opts = { require_approval_before = true, adapter = "searxng" } },
           ["fetch_webpage"] = { opts = { require_approval_before = true, adapter = "markitdown" } },
           -- File tools refuse paths outside the project folder (bonsai.sandbox).
           ["read_file"] = { path = "bonsai.tools.read_file" },
