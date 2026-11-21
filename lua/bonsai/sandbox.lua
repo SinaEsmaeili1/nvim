@@ -53,6 +53,17 @@ function M.inside(path)
   return real == root or real:sub(1, #root + 1) == root .. "/"
 end
 
+-- Why tools that work in Neovim's current folder must not run now, or nil.
+-- The plugin's tools search that folder and open relative paths from it, so it
+-- has to be inside the project too (contract: NEOVIM-AGENT.md, Addendum 3, B2).
+function M.folder_refusal()
+  local cwd = vim.fn.getcwd()
+  if not M.usable() then return M.refusal(cwd) end
+  if not M.inside(cwd) then
+    return ("Refused: Neovim's current folder (%s) is outside the project folder (%s). Go back with :cd %s"):format(cwd, M.root(), M.root())
+  end
+end
+
 function M.refusal(path)
   if not M.usable() then
     return ("Refused: Neovim was opened in %s, which is too wide for Bonsai. Open Neovim in a project folder."):format(M.root())

@@ -20,7 +20,7 @@ Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Cl
 | high | 64K | yes | ~34 tok/s |
 | max | 180K | yes | ~34 tok/s, or ~14 tok/s if the GPU is full and the cache moves to RAM |
 
-`bonsai-serve` (in my [bonsai](https://github.com/SinaEsmaeili1/bonsai) repo) runs the model on localhost. Changing the level reloads it with the new context. Thinking is switched per request.
+`bonsai-serve` (in my [bonsai](https://github.com/SinaEsmaeili1/bonsai) repo) runs the model on localhost, behind a key that only my own tools have, and it answers browser pages from localhost only. Changing the level reloads it with the new context. Thinking is switched per request.
 
 </details>
 
@@ -28,7 +28,8 @@ Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Cl
 <summary><b>Sandboxed to the project</b></summary>
 
 - Commands run inside bubblewrap. Only the project folder is writable, the rest of my home folder is hidden, there's no network, and nothing can escalate (no `sudo`).
-- The file tools refuse any path outside the project, and symlinks are resolved so they can't sneak out.
+- The file tools refuse any path outside the project, and symlinks are resolved so they can't sneak out. A call that doesn't name its path is refused too.
+- Search, git and diagnostics are held to the project as well: they run only while Neovim's current folder is inside it.
 - Opened in `~` or `/`, the tools stay off. The folder is too wide to be a project.
 
 </details>

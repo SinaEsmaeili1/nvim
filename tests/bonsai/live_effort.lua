@@ -34,8 +34,13 @@ local body = vim.json.encode({
   chat_template_kwargs = cc.handlers.form_parameters({}, {}, {}).chat_template_kwargs,
   max_tokens = 600,
 })
+-- Changed 2026-11-21: the server needs its key (Addendum 3). curl reads the header from a
+-- file in Neovim's private temp folder, so the key is never on a command line.
+local header_file = vim.fn.tempname()
+vim.fn.writefile({ "Authorization: Bearer " .. cc.api_key() }, header_file)
 local out = vim.system({ "curl", "-s", "-m", "120", "http://127.0.0.1:8089/v1/chat/completions",
-  "-H", "Content-Type: application/json", "-d", body }, { text = true }):wait().stdout
+  "-H", "Content-Type: application/json", "-H", "@" .. header_file, "-d", body }, { text = true }):wait().stdout
+os.remove(header_file)
 local msg = vim.json.decode(out).choices[1].message
 print(("reply: %s | thinking chars: %d"):format(vim.trim(msg.content or ""):sub(1, 80), #(msg.reasoning_content or "")))
 good = good and #(msg.reasoning_content or "") > 0

@@ -292,6 +292,140 @@ test("the chat uses the sandboxed tools", function()
   end
 end)
 
+-- ---- the server key and the full guards (owner, 2026-11-21: "other than the second and the
+-- third security leave the rest"; contract: NEOVIM-AGENT.md, Addendum 3) ----
+
+local function write_file(path, text)
+  local f = assert(io.open(path, "w"))
+  f:write(text)
+  f:close()
+end
+
+-- Runs fn with Neovim's current folder set to dir, then goes back.
+local function in_dir(dir, fn)
+  local before = vim.fn.getcwd()
+  vim.cmd.cd(vim.fn.fnameescape(dir))
+  local ok, err = pcall(fn)
+  vim.cmd.cd(vim.fn.fnameescape(before))
+  if not ok then error(err, 0) end
+end
+
+-- Calls a guarded tool the way codecompanion's runner does, and returns what it reports.
+local function call_tool(name, args)
+  local tool = require("bonsai.tools." .. name)
+  local got
+  local returned = tool.cmds[1]({ tool = { opts = {} } }, args, {
+    output_cb = function(o) got = o end,
+    register_job = function() end,
+  })
+  if returned ~= nil then return returned end
+  vim.wait(3000, function() return got ~= nil end)
+  return got
+end
+
+test("requests carry the Bonsai server's key from bonsai-serve's key file", function()
+  write_file(tmp .. "/api-key", "test-key-123\n")
+  local adapter_utils = require("codecompanion.adapters.utils")
+  local adapter = adapter_utils.get_env_vars(cc.opts().adapters.http.bonsai())
+  eq(adapter_utils.set_env_vars(adapter, adapter.headers).Authorization, "Bearer test-key-123", "Authorization")
+  os.remove(tmp .. "/api-key")
+end)
+
+test("a tool with no path argument can't be put behind the file guard", function()
+  package.loaded["bonsai_test.no_path_tool"] = {
+    schema = { ["function"] = { parameters = { properties = { query = { type = "string" } } } } },
+    cmds = { function() return { status = "success", data = "ran" } end },
+  }
+  local ok, err = pcall(require("bonsai.tools.guard"), "bonsai_test.no_path_tool")
+  eq(ok, false, "wrapping fails")
+  truthy(tostring(err):find("bonsai_test.no_path_tool", 1, true), "the error names the tool")
+end)
+
+test("file tools refuse a call with no path, a path under another name, or a path that isn't text", function()
+  require("bonsai.sandbox").set_root(project)
+  in_dir(project, function()
+    for _, name in ipairs({ "read_file", "edit_file", "create_file", "overwrite_file", "delete_file", "get_diagnostics" }) do
+      for _, case in ipairs({
+        { "no path", {} },
+        { "a path under another name", { path = outside .. "/secret.txt" } },
+        { "a second path outside", { filepath = project .. "/src/scratch.txt", file_path = outside .. "/secret.txt" } },
+        { "a path that isn't text", { filepath = { outside .. "/secret.txt" } } },
+      }) do
+        local ok, got = pcall(call_tool, name, case[2])
+        truthy(ok, name .. ", " .. case[1] .. ": the guard answers instead of the tool failing: " .. tostring(got))
+        eq(got and got.status, "error", name .. ", " .. case[1])
+        truthy(got and tostring(got.data):find("Refused", 1, true), name .. ", " .. case[1] .. ": refused")
+      end
+    end
+  end)
+end)
+
+test("file tools refuse when Neovim's current folder is outside the project, even for a relative path", function()
+  require("bonsai.sandbox").set_root(project)
+  write_file(outside .. "/secret.txt", "top secret\n")
+  in_dir(outside, function()
+    local got = call_tool("read_file", { filepath = "secret.txt" })
+    eq(got and got.status, "error", "status")
+    -- vim.inspect, since a tool's data can be a table ({ for_llm = ... }); fixed 2026-11-21 before GREEN.
+    truthy(not vim.inspect(got and got.data):find("top secret", 1, true), "the file stays unread")
+  end)
+end)
+
+test("read_file still reads a file inside the project", function()
+  require("bonsai.sandbox").set_root(project)
+  write_file(project .. "/src/hello.txt", "hello from the project\n")
+  in_dir(project, function()
+    local got = call_tool("read_file", { filepath = project .. "/src/hello.txt" })
+    eq(got and got.status, "success", "status")
+    -- read_file returns its text in data.for_llm, a table; fixed 2026-11-21 before GREEN.
+    truthy(vim.inspect(got and got.data):find("hello from the project", 1, true), "content")
+  end)
+end)
+
+test("search and git tools refuse when Neovim was opened in / or its current folder is outside the project", function()
+  local sandbox = require("bonsai.sandbox")
+  for _, name in ipairs({ "grep_search", "file_search", "get_changed_files" }) do
+    local args = name == "get_changed_files" and {} or { query = "secret" }
+    sandbox.set_root("/")
+    in_dir(outside, function()
+      local got = call_tool(name, args)
+      eq(got and got.status, "error", name .. ", opened in /")
+    end)
+    sandbox.set_root(project)
+    in_dir(outside, function()
+      local got = call_tool(name, args)
+      eq(got and got.status, "error", name .. ", current folder outside")
+      truthy(got and tostring(got.data):find("Refused", 1, true), name .. ": refused")
+    end)
+  end
+  sandbox.set_root(project)
+end)
+
+test("file_search still finds a project file", function()
+  require("bonsai.sandbox").set_root(project)
+  write_file(project .. "/src/hello.txt", "hello from the project\n")
+  in_dir(project, function()
+    local got = call_tool("file_search", { query = "**/hello.txt" })
+    eq(got and got.status, "success", "status")
+    truthy(vim.inspect(got and got.data):find("hello.txt", 1, true), "found")
+  end)
+end)
+
+test("the chat uses the guarded tools, and every agent and files group tool is guarded", function()
+  local tools = cc.opts().interactions.chat.tools
+  for _, name in ipairs({ "get_diagnostics", "grep_search", "file_search", "get_changed_files" }) do
+    eq(tools[name] and tools[name].path, "bonsai.tools." .. name, name)
+  end
+  local groups = require("codecompanion.config").interactions.chat.tools.groups
+  for _, group in ipairs({ "agent", "files" }) do
+    for _, name in ipairs(groups[group].tools) do
+      if name ~= "ask_questions" then
+        eq(tools[name] and tools[name].path, "bonsai.tools." .. name, group .. " group: " .. name)
+      end
+    end
+  end
+end)
+
 -- Owner, 2026-11-21: every website Bonsai visits needs approval first.
 test("web search and page fetches wait for approval", function()
   local tools = cc.opts().interactions.chat.tools

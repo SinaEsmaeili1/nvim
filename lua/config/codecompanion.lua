@@ -9,6 +9,15 @@ local M = {}
 
 M.URL = "http://127.0.0.1:8089"
 
+-- The server's key, which bonsai-serve keeps next to its effort level (contract:
+-- NEOVIM-AGENT.md, Addendum 3). Read for every request and never logged.
+function M.api_key()
+  local f = io.open(vim.fs.joinpath(vim.fs.dirname(effort.state_file()), "api-key"), "r")
+  local key = f and vim.trim(f:read("*a") or "") or ""
+  if f then f:close() end
+  return key
+end
+
 M.handlers = {
   -- Thinking follows the effort level, and is sent with every request.
   form_parameters = function(self, params, messages)
@@ -33,7 +42,8 @@ local function bonsai_adapter()
     formatted_name = "Bonsai",
     env = {
       url = M.URL,
-      api_key = "local", -- llama-server on localhost needs no key
+      -- The server answers only requests that carry its key.
+      api_key = function() return M.api_key() end,
     },
     schema = {
       -- llama-server serves one model whatever the name says, so the model
@@ -140,6 +150,12 @@ function M.opts()
           ["create_file"] = { path = "bonsai.tools.create_file", opts = { require_approval_before = true } },
           ["overwrite_file"] = { path = "bonsai.tools.overwrite_file", opts = { require_approval_before = true } },
           ["delete_file"] = { path = "bonsai.tools.delete_file", opts = { require_approval_before = true } },
+          -- Diagnostics open the file they're given, so they pass the file guard too. Search and
+          -- git tools work in Neovim's current folder, so they run only while it's in the project.
+          ["get_diagnostics"] = { path = "bonsai.tools.get_diagnostics" },
+          ["grep_search"] = { path = "bonsai.tools.grep_search" },
+          ["file_search"] = { path = "bonsai.tools.file_search" },
+          ["get_changed_files"] = { path = "bonsai.tools.get_changed_files" },
         },
       },
       inline = { adapter = "bonsai" },
