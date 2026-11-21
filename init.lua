@@ -47,6 +47,7 @@ require("plugin_specs")
 
 -- 4. Load the rest of the UI
 require("custom-autocmd")
+require("templates")
 require("mappings")
 require("diagnostic-conf")
 require("folders").setup() -- remember opened folders for "Recently opened folders"
