@@ -26,6 +26,8 @@
 --     opts.pid          this Neovim's PID (default vim.uv.os_getpid())
 --     opts.alive        function(pid) -> boolean (default vim.uv.kill(pid, 0) == 0)
 --     opts.web_running  function() -> boolean, true while a bonsai-web session runs
+--     opts.ppid         this Neovim's parent PID (default vim.uv.os_getppid()), for O5a
+--     opts.proc_root    the proc folder read for bonsai-web sessions (default "/proc"), O5a
 --   lifecycle.has_ui()      the has_ui from setup opts. ui/init.lua asks it before it
 --                           starts Bonsai when the panel opens (O1a).
 --   lifecycle.register()    writes <state_dir>/open/<pid>. No-op without a UI. Runs on UIEnter.
@@ -34,9 +36,13 @@
 --                           web_running() is false, runs {"bonsai-serve", "stop"} and
 --                           waits at most 10 s.
 --   lifecycle.open_count()  the live open PIDs; stale files are removed.
+--   lifecycle.web_running() true while a bonsai-web session runs: opts.web_running when
+--                           given, else the proc check (O5a).
 --   lifecycle.try_lock() / lifecycle.unlock()
 --                           <state_dir>/start.lock: one mkdir. A lock younger than 300 s
---                           is held by another start; an older one is stale.
+--                           is held by another start; an older one is stale. The lock
+--                           folder holds a file "pid" with the starter's PID; a lock whose
+--                           PID is not alive (opts.alive) is stale at once (O2a).
 -- bonsai.ui is reached through its public functions: M.start() (Ask Bonsai, always starts),
 -- M.open(), M.toggle() (Ctrl+A when it opens: starts only with a UI) and M.submit(text).
 -- start_server(cb) is local.
@@ -776,6 +782,286 @@ end)
 -- ---- guard: whatever ran, only bonsai-serve status, stop and the effort levels ----
 
 test("guard: only bonsai-serve status, stop and effort levels were ever run", function()
+  eq(unexpected, {}, "commands other than bonsai-serve")
+  for _, cmd in ipairs(commands) do
+    local allowed = #cmd == 2
+      and cmd[1] == "bonsai-serve"
+      and (cmd[2] == "status" or cmd[2] == "stop" or LEVELS[cmd[2]] ~= nil)
+    truthy(allowed, "unexpected command " .. vim.inspect(cmd))
+  end
+end)
+
+-- ---- Addendum 9, after the GREEN review: O5a, O2a, O2b, O3a, O4b, O2c (RED tests) ----
+
+-- A fake /proc: one folder per PID, its cmdline holds the argv, NUL-separated.
+local function fake_proc(procs)
+  local root = vim.fn.tempname()
+  vim.fn.mkdir(root, "p")
+  for pid, argv in pairs(procs) do
+    vim.fn.mkdir(root .. "/" .. pid, "p")
+    local f = assert(io.open(root .. "/" .. pid .. "/cmdline", "wb"))
+    f:write(table.concat(argv, "\0") .. "\0")
+    f:close()
+  end
+  return root
+end
+
+-- lifecycle_opts, but the bonsai-web check is the proc check of proc_root (no fake).
+local function proc_opts(proc_root, extra)
+  local o = lifecycle_opts(extra)
+  o.web_running = nil
+  o.proc_root = proc_root
+  return o
+end
+
+local function read_file(path)
+  local f = assert(io.open(path, "r"))
+  local text = f:read("*a")
+  f:close()
+  return text
+end
+
+local BONSAI_WEB_SESSIONS = {
+  { "bash", "/x/bonsai-web" },
+  { "/usr/bin/bash", "/home/el/.local/bin/bonsai-web", "--x" },
+  { "uv", "run", "--quiet", "/home/el/models/bonsai-27b/web/agent.py", "http://example.test/" },
+  { "/home/el/.cache/uv/x/bin/python3", "/home/el/models/bonsai-27b/web/agent.py" },
+}
+
+local NOT_BONSAI_WEB = {
+  { "nvim", "/x/bonsai-web" },
+  { "nvim", "/home/el/models/bonsai-27b/web/agent.py" },
+  { "tail", "-f", "/x/bonsai-web" },
+  { "bash", "-c", "echo bonsai-27b/web/agent.py" },
+}
+
+test("O5a each bonsai-web session counts as running (web_running is true)", function()
+  local lc = load_lifecycle()
+  fresh(true)
+  for _, argv in ipairs(BONSAI_WEB_SESSIONS) do
+    local root = fake_proc { [7001] = argv }
+    keeping_autocmds(function()
+      lc.setup(proc_opts(root))
+      eq(lc.web_running(), true, "web_running for " .. table.concat(argv, " "))
+    end)
+  end
+end)
+
+test("O5a an editor, tail or a bash -c line is not a bonsai-web session", function()
+  local lc = load_lifecycle()
+  fresh(true)
+  for _, argv in ipairs(NOT_BONSAI_WEB) do
+    local root = fake_proc { [7001] = argv }
+    keeping_autocmds(function()
+      lc.setup(proc_opts(root))
+      eq(lc.web_running(), false, "web_running for " .. table.concat(argv, " "))
+    end)
+  end
+end)
+
+test("O5a a matching session that is this Neovim or its parent (the TUI) does not count", function()
+  local lc = load_lifecycle()
+  fresh(true)
+  local cases = {
+    { who = "this Neovim", pid = 4242 },
+    { who = "its parent", pid = 4343 },
+  }
+  for _, c in ipairs(cases) do
+    local root = fake_proc { [c.pid] = { "bash", "/x/bonsai-web" } }
+    keeping_autocmds(function()
+      lc.setup(proc_opts(root, { ppid = 4343 }))
+      eq(lc.web_running(), false, "web_running when the session is " .. c.who)
+    end)
+  end
+end)
+
+test("O5a an unreadable proc folder counts as running, so Bonsai is not stopped", function()
+  local lc = load_lifecycle()
+  local mark = fresh(true)
+  local missing = vim.fn.tempname() .. "/no-such-proc"
+  keeping_autocmds(function()
+    lc.setup(proc_opts(missing))
+    eq(lc.web_running(), true, "web_running with no proc folder")
+    lc.register()
+    lc.on_leave()
+  end)
+  eq(count_cmd(since(mark), "stop"), 0, "stop runs")
+end)
+
+test("O5a the last Neovim to leave stops Bonsai when only its own agent.py is open", function()
+  local lc = load_lifecycle()
+  local mark = fresh(true)
+  local root = fake_proc { [4242] = { "nvim", "/home/el/models/bonsai-27b/web/agent.py" } }
+  keeping_autocmds(function()
+    lc.setup(proc_opts(root))
+    lc.register()
+    lc.on_leave()
+  end)
+  eq(count_cmd(since(mark), "stop"), 1, "stop runs")
+  eq(files_in(state_dir .. "/open"), {}, "open files")
+end)
+
+test("O2a a lock whose PID is dead is taken over at once, even with a new mtime", function()
+  local mark = fresh(false)
+  local lock = state_dir .. "/start.lock"
+  vim.fn.mkdir(lock)
+  write(lock .. "/pid", "999999\n")
+  truthy(os.time() - vim.uv.fs_stat(lock).mtime.sec < 300, "the lock is young")
+  ui.start()
+  truthy(
+    wait_until(function()
+      return count_starts(since(mark)) == 1
+    end),
+    "the start went ahead"
+  )
+  finish_start(OK)
+end)
+
+test("O2a a lock held by a live PID, with a new mtime, starts nothing and says so", function()
+  local mark = fresh(false)
+  local lock = state_dir .. "/start.lock"
+  vim.fn.mkdir(lock)
+  write(lock .. "/pid", "5151\n")
+  LIVE[5151] = true
+  ui.start()
+  settle(400)
+  eq(count_starts(since(mark)), 0, "starts while a live other Neovim holds the lock")
+  truthy(exists(lock), "the other Neovim's lock is left alone")
+  truthy(
+    table.concat(notices, "\n"):find("Bonsai is starting in another Neovim", 1, true),
+    "a notice that another Neovim is starting Bonsai"
+  )
+end)
+
+test("O2a try_lock writes the starter's PID into the lock folder's pid file", function()
+  local lc = load_lifecycle()
+  fresh(false)
+  keeping_autocmds(function()
+    lc.setup(lifecycle_opts { pid = 4242 })
+    local took = lc.try_lock()
+    local pidfile = state_dir .. "/start.lock/pid"
+    local content = exists(pidfile) and vim.trim(read_file(pidfile)) or "no pid file"
+    lc.unlock()
+    eq(took, true, "try_lock result")
+    eq(content, "4242", "pid file content")
+  end)
+end)
+
+test(
+  "O2b /effort while this Neovim's start runs starts nothing, says to wait, and is not sent",
+  function()
+    local mark = fresh(false)
+    local lock = state_dir .. "/start.lock"
+    ui.start()
+    truthy(
+      wait_until(function()
+        return count_starts(since(mark)) == 1
+      end),
+      "the start is running"
+    )
+    local before = #commands
+    ui.submit("/effort low")
+    settle()
+    eq(#commands - before, 0, "commands from /effort low")
+    truthy(
+      table.concat(notices, "\n"):find("Bonsai is starting; try /effort when it's up", 1, true),
+      "a notice telling the user to wait"
+    )
+    finish_start(OK)
+    truthy(
+      wait_until(function()
+        return not exists(lock)
+      end),
+      "the start ended"
+    )
+    settle()
+    eq(count_starts(since(mark)), 1, "level commands after the start (no extra one)")
+    eq(chat.submitted, 0, "chat requests for /effort low")
+  end
+)
+
+test(
+  "O3a two messages sent while the start runs make exactly one request, the last text",
+  function()
+    local mark = fresh(false)
+    ui.start()
+    truthy(
+      wait_until(function()
+        return count_starts(since(mark)) == 1
+      end),
+      "the start is running"
+    )
+    ui.submit("hello")
+    ui.submit("hello\nworld")
+    settle()
+    eq(chat.submitted, 0, "requests sent before the start finished")
+    finish_start(OK)
+    truthy(
+      wait_until(function()
+        return chat.submitted >= 1
+      end),
+      "the message is sent after the start"
+    )
+    settle()
+    eq(chat.submitted, 1, "chat requests")
+    eq(#chat.sent, 1, "messages added")
+    eq(chat.sent[1].content, "hello\nworld", "message text")
+  end
+)
+
+test("O4b register with an unwritable state folder shows one notice and raises nothing", function()
+  local lc = load_lifecycle()
+  fresh(false)
+  local blocker = state_dir .. "/blocker"
+  write(blocker, "not a folder\n")
+  local before = #notices
+  keeping_autocmds(function()
+    lc.setup(lifecycle_opts { state_dir = blocker .. "/bonsai" })
+    local ok, err = pcall(function()
+      lc.register()
+      lc.register()
+    end)
+    truthy(ok, "register raised: " .. tostring(err))
+  end)
+  local shown = 0
+  for i = before + 1, #notices do
+    if notices[i]:find("isn't writable", 1, true) then
+      shown = shown + 1
+    end
+  end
+  eq(shown, 1, "notices saying the folder isn't writable")
+end)
+
+-- The last panel test: a start whose effort.set never calls back stays stuck in this
+-- Neovim until the fix, which would break every later panel test.
+test("O2c a start whose effort.set returns false without a callback ends as a failure", function()
+  local mark = fresh(false)
+  local lock = state_dir .. "/start.lock"
+  local effort_mod = require("bonsai.effort")
+  local real_set = effort_mod.set
+  local ran, err = pcall(function()
+    effort_mod.set = function()
+      return false
+    end
+    ui.start()
+    truthy(
+      wait_until(function()
+        return error_shown("Bonsai didn't start")
+      end),
+      "the panel says the start failed"
+    )
+    truthy(not exists(lock), "the lock folder is gone after the failed start")
+  end)
+  effort_mod.set = real_set
+  if not ran then
+    error(err, 0)
+  end
+  eq(count_starts(since(mark)), 0, "level commands")
+end)
+
+-- Runs after every test above, so it checks everything they recorded, the new tests
+-- included. A failure here is reported like any other test and does not stop the file.
+test("guard (all tests): only bonsai-serve status, stop and effort levels were ever run", function()
   eq(unexpected, {}, "commands other than bonsai-serve")
   for _, cmd in ipairs(commands) do
     local allowed = #cmd == 2
