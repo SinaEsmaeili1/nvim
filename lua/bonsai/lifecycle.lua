@@ -230,12 +230,19 @@ end
 -- O2: the lock is a folder made by one mkdir. A lock whose PID is dead is stale at once
 -- (O2a). Any other lock younger than 300 s belongs to another start. Returns true when
 -- this Neovim holds the lock. Otherwise false, and true as the second value when a live
--- other Neovim holds it.
+-- other Neovim holds it. O4c: never raises. A state folder that can't be made or written
+-- shows the "isn't writable" notice once (warn_unwritable) and returns false.
 function M.try_lock()
-  vim.fn.mkdir(state_dir(), "p")
+  -- A failed mkdir raises; the lock mkdir below reports it (O4c).
+  pcall(vim.fn.mkdir, state_dir(), "p")
   local lock = state_dir() .. "/start.lock"
-  if vim.uv.fs_mkdir(lock, 448) then
+  local ok, _, code = vim.uv.fs_mkdir(lock, 448)
+  if ok then
     return write_pid(lock)
+  end
+  if code ~= "EEXIST" then
+    warn_unwritable()
+    return false, false
   end
   local st = vim.uv.fs_stat(lock)
   if not st then
@@ -250,8 +257,12 @@ function M.try_lock()
   -- Stale: take it over.
   os.remove(lock .. "/pid")
   vim.uv.fs_rmdir(lock)
-  if vim.uv.fs_mkdir(lock, 448) then
+  ok, _, code = vim.uv.fs_mkdir(lock, 448)
+  if ok then
     return write_pid(lock)
+  end
+  if code ~= "EEXIST" then
+    warn_unwritable()
   end
   return false, false
 end
