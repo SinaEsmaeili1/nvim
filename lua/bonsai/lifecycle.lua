@@ -6,11 +6,14 @@ local M = {}
 
 local LOCK_MAX_AGE = 300 -- seconds: an older start.lock is stale (O2)
 local STOP_WAIT_MS = 10000 -- O5: the stop finishes before Neovim exits
+local AGENT = "bonsai-27b/web/agent.py" -- the bonsai-web agent (O5a)
 
 -- Set by setup; a missing field means the real thing.
 local opts = {}
 -- O4a: only a Neovim that registered stops Bonsai when it closes.
 local registered = false
+-- O4b: the "can't track this Neovim" notice shows once.
+local warned = false
 
 local function state_dir()
   return opts.state_dir or (vim.fn.stdpath("state") .. "/bonsai")
@@ -42,19 +45,71 @@ local function run(cmd, run_opts)
   return vim.system(cmd, run_opts)
 end
 
--- A bonsai-web session is its agent (bonsai-27b/web/agent.py) or its launcher. pgrep
--- exits 1 when none runs. When pgrep can't tell (an error or a timeout), a session is
--- assumed, so nothing is stopped.
-local WEB_PATTERN = "bonsai-27b/web/agent\\.py|/bonsai-web( |$)"
+local function ends_with(text, suffix)
+  return text:sub(-#suffix) == suffix
+end
 
-local function web_running()
+-- The argv of a process, from its cmdline (NUL-separated). nil when it can't be read.
+local function read_argv(path)
+  local f = io.open(path, "rb")
+  if not f then
+    return nil
+  end
+  local text = f:read("*a") or ""
+  f:close()
+  local argv = vim.split(text, "\0", { plain = true })
+  if argv[#argv] == "" then
+    table.remove(argv)
+  end
+  return argv
+end
+
+-- O5a: the three shapes of a bonsai-web session: an sh or bash whose first argument ends
+-- in "/bonsai-web"; uv run with an argument that ends in the agent; a python whose first
+-- argument ends in the agent.
+local function is_web_session(argv)
+  local exe = (argv[1] or ""):match("([^/]*)$")
+  local first = argv[2] or ""
+  if (exe == "sh" or exe == "bash") and ends_with(first, "/bonsai-web") then
+    return true
+  end
+  if exe == "uv" and first == "run" then
+    for i = 3, #argv do
+      if ends_with(argv[i], AGENT) then
+        return true
+      end
+    end
+  end
+  return exe:find("^python") ~= nil and ends_with(first, AGENT)
+end
+
+-- O5a: true while a bonsai-web session runs, other than this Neovim and its parent (the
+-- TUI). opts.web_running overrides the check. If the proc folder can't be read, a session
+-- is assumed, so nothing is stopped.
+function M.web_running()
   if opts.web_running then
     return opts.web_running()
   end
-  local ok, r = pcall(function()
-    return vim.system({ "pgrep", "-f", WEB_PATTERN }, { text = true }):wait(3000)
-  end)
-  return not ok or r.code ~= 1
+  local root = opts.proc_root or "/proc"
+  local handle = vim.uv.fs_scandir(root)
+  if not handle then
+    return true
+  end
+  local me, parent = pid(), opts.ppid or vim.uv.os_getppid()
+  while true do
+    local name = vim.uv.fs_scandir_next(handle)
+    if not name then
+      break
+    end
+    local p = tonumber(name)
+    if p and p ~= me and p ~= parent then
+      local argv = read_argv(root .. "/" .. name .. "/cmdline")
+      if argv and is_web_session(argv) then
+        return true
+      end
+    end
+  end
+  return false
 end
 
 -- True in a Neovim with a UI (O1a, O6). Ui-less Neovims never start or stop Bonsai.
@@ -70,6 +125,7 @@ end
 function M.setup(o)
   opts = o or {}
   registered = false
+  warned = false
   local group = vim.api.nvim_create_augroup("BonsaiLifecycle", { clear = true })
   vim.api.nvim_create_autocmd("UIEnter", {
     group = group,
@@ -85,15 +141,27 @@ function M.setup(o)
   })
 end
 
--- O4: a Neovim with a UI writes its PID file. Without a UI it writes nothing (O6).
+-- O4b: says once that this Neovim can't be tracked, so it won't stop Bonsai on close.
+local function warn_unwritable()
+  if warned then
+    return
+  end
+  warned = true
+  local text =
+    "Bonsai can't track this Neovim (%s isn't writable), so it won't stop Bonsai on close"
+  vim.notify(text:format(open_dir()), vim.log.levels.WARN, { title = "Bonsai" })
+end
+
+-- O4: a Neovim with a UI writes its PID file. Without a UI it writes nothing (O6). A folder
+-- that can't be written is reported, never raised (O4b).
 function M.register()
   if not M.has_ui() then
     return
   end
-  vim.fn.mkdir(open_dir(), "p")
-  local f = io.open(open_file(pid()), "w")
+  local made = pcall(vim.fn.mkdir, open_dir(), "p")
+  local f = made and io.open(open_file(pid()), "w")
   if not f then
-    return
+    return warn_unwritable()
   end
   f:close()
   registered = true
@@ -130,7 +198,7 @@ function M.on_leave()
   end
   registered = false
   os.remove(open_file(pid()))
-  if M.open_count() > 0 or web_running() then
+  if M.open_count() > 0 or M.web_running() then
     return
   end
   -- Stopping a server that isn't running is fine.
@@ -139,25 +207,60 @@ function M.on_leave()
   end)
 end
 
--- O2: the lock is a folder made by one mkdir. A lock younger than 300 s belongs to another
--- start (false). An older one is stale and is taken over.
+-- O2a: the lock folder holds a "pid" file with the starter's PID.
+local function read_pid(lock)
+  local f = io.open(lock .. "/pid", "r")
+  if not f then
+    return nil
+  end
+  local text = f:read("*a") or ""
+  f:close()
+  return tonumber(vim.trim(text))
+end
+
+local function write_pid(lock)
+  local f = io.open(lock .. "/pid", "w")
+  if f then
+    f:write(pid() .. "\n")
+    f:close()
+  end
+  return true
+end
+
+-- O2: the lock is a folder made by one mkdir. A lock whose PID is dead is stale at once
+-- (O2a). Any other lock younger than 300 s belongs to another start. Returns true when
+-- this Neovim holds the lock. Otherwise false, and true as the second value when a live
+-- other Neovim holds it.
 function M.try_lock()
   vim.fn.mkdir(state_dir(), "p")
   local lock = state_dir() .. "/start.lock"
   if vim.uv.fs_mkdir(lock, 448) then
-    return true
+    return write_pid(lock)
   end
   local st = vim.uv.fs_stat(lock)
-  if not st or os.time() - st.mtime.sec < LOCK_MAX_AGE then
-    return false
+  if not st then
+    return false, false
   end
+  local holder = read_pid(lock)
+  local holder_alive = holder ~= nil and alive(holder)
+  local dead = holder ~= nil and not holder_alive
+  if not dead and os.time() - st.mtime.sec < LOCK_MAX_AGE then
+    return false, holder_alive
+  end
+  -- Stale: take it over.
+  os.remove(lock .. "/pid")
   vim.uv.fs_rmdir(lock)
-  return vim.uv.fs_mkdir(lock, 448) == true
+  if vim.uv.fs_mkdir(lock, 448) then
+    return write_pid(lock)
+  end
+  return false, false
 end
 
 -- Only after a successful try_lock.
 function M.unlock()
-  vim.uv.fs_rmdir(state_dir() .. "/start.lock")
+  local lock = state_dir() .. "/start.lock"
+  os.remove(lock .. "/pid")
+  vim.uv.fs_rmdir(lock)
 end
 
 return M

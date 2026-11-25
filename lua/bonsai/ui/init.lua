@@ -281,7 +281,7 @@ end
 -- ---- starting Bonsai (Addendum 9: it runs only while Neovim is open) ----
 
 local starting = false -- this Neovim's start is running (O1, O2)
-local pending = {} -- messages held while it runs, sent when it succeeds (O3)
+local held = nil -- the message held while it runs, sent when it succeeds (O3)
 
 local function input_text()
   if not (S.input_buf and vim.api.nvim_buf_is_valid(S.input_buf)) then
@@ -296,11 +296,11 @@ local function set_input(text)
   end
 end
 
--- O3: a held message is sent when the start succeeds. When it fails, the message stays
+-- O3: the held message is sent when the start succeeds. When it fails, the message stays
 -- in the input box and the reason is shown.
 local function start_done(ok, output)
-  local texts = pending
-  pending = {}
+  local text = held
+  held = nil
   if not ok then
     vim.notify(
       "Bonsai didn't start: " .. (output ~= "" and output or "no reason given"),
@@ -309,19 +309,27 @@ local function start_done(ok, output)
     )
     return
   end
-  if #texts > 0 and input_text() == table.concat(texts, "\n") then
-    set_input("")
-  end
-  for _, text in ipairs(texts) do
+  if text then
+    if input_text() == text then
+      set_input("")
+    end
     M.submit(text)
   end
 end
 
 -- Starts Bonsai at the saved effort if it isn't running. The start takes the lock first
 -- (O2), then runs `bonsai-serve status` and the level. `done(ok, output)` runs when it
--- ends. A start this Neovim already runs, or one another Neovim holds, is not repeated.
+-- ends. A start this Neovim already runs is not repeated. When a live other Neovim holds
+-- the lock, this one says so (O2a).
 local function start_server(done)
-  if starting or not lifecycle.try_lock() then
+  if starting then
+    return
+  end
+  local locked, other_live = lifecycle.try_lock()
+  if not locked then
+    if other_live then
+      vim.notify("Bonsai is starting in another Neovim", vim.log.levels.INFO, { title = "Bonsai" })
+    end
     return
   end
   starting = true
@@ -350,14 +358,17 @@ local function start_server(done)
       vim.schedule(function()
         local level = effort.current().name
         vim.notify("Starting Bonsai at effort " .. level .. "…", vim.log.levels.INFO)
-        local set, set_err = pcall(effort.set, level, function(ok, out)
+        local set, accepted = pcall(effort.set, level, function(ok, out)
           if ok then
             vim.notify(out, vim.log.levels.INFO)
           end
           finish(ok, out)
         end)
         if not set then
-          finish(false, tostring(set_err))
+          finish(false, tostring(accepted))
+        elseif not accepted then
+          -- O2c: nothing was run, and no callback will come.
+          finish(false, "bonsai-serve wasn't run")
         end
       end)
     end
@@ -444,12 +455,25 @@ local function refresh_title()
   render()
 end
 
+local function is_effort(text)
+  return text == "/effort" or text:sub(1, 8) == "/effort "
+end
+
 -- What the input box sends: /effort, /clear, ? and /exit are handled here;
 -- everything else goes to the chat (so @{tools} still work).
 function M.submit(text)
   text = vim.trim(text or "")
   if text == "" then
     return
+  end
+  if starting and is_effort(text) then
+    -- O2b: nothing runs and nothing is queued; the text stays in the box.
+    set_input(text)
+    return vim.notify(
+      "Bonsai is starting; try /effort when it's up",
+      vim.log.levels.INFO,
+      { title = "Bonsai" }
+    )
   end
   if text == "/effort" then
     return effort.pick(function()
@@ -464,9 +488,10 @@ function M.submit(text)
     return vim.cmd("qall")
   end
   if starting then
-    -- O3: wait for this Neovim's start; the text stays in the input box meanwhile.
-    table.insert(pending, text)
-    return set_input(table.concat(pending, "\n"))
+    -- O3, O3a: wait for this Neovim's start. The box holds this one message, so a second
+    -- Enter replaces it and never sends it twice.
+    held = text
+    return set_input(text)
   end
   S.base_bytes = chat_bytes()
   S.chat:add_buf_message { role = "user", content = text }
@@ -559,16 +584,24 @@ function M.project_choices(history_path)
   return out
 end
 
+-- Opens the panel and starts Bonsai once. M.open starts it with a UI (O1); this starts it
+-- only when M.open didn't (no UI, or the panel was already open), so one notice shows.
+local function open_and_start(opts)
+  local was_open = M.is_open()
+  M.open(opts)
+  if was_open or not lifecycle.has_ui() then
+    start_server(start_done)
+  end
+end
+
 local function start_agent()
-  M.open { fullscreen = true }
-  start_server(start_done)
+  open_and_start { fullscreen = true }
 end
 
 -- The start menu's "Ask Bonsai" (lua/config/dashboard-nvim.lua): the panel
 -- Ctrl+A opens, with Bonsai started if it isn't running (O1a: also without a UI).
 function M.start()
-  M.open()
-  start_server(start_done)
+  open_and_start()
 end
 
 -- bonsai-agent: Bonsai as a terminal coding agent, full-screen. Started from
