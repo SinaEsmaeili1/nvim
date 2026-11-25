@@ -1059,6 +1059,36 @@ test("O2c a start whose effort.set returns false without a callback ends as a fa
   eq(count_starts(since(mark)), 0, "level commands")
 end)
 
+-- O4c: try_lock never raises. With an unwritable state folder, Ctrl+A opens the panel
+-- without an error, runs no command, and shows the one-time notice (once, even when the
+-- panel is opened again).
+test(
+  "O4c Ctrl+A with an unwritable state folder raises nothing, runs no command and shows the notice once",
+  function()
+    local mark = fresh(false)
+    local blocker = state_dir .. "/blocker"
+    write(blocker, "not a folder\n")
+    -- The state folder sits under a regular file, so nothing can be created in it.
+    setup_lock_folder(blocker .. "/bonsai", true)
+    local before = #notices
+    local opened, err = pcall(ui.toggle)
+    truthy(opened, "the first Ctrl+A raised: " .. tostring(err))
+    settle(100)
+    ui.close()
+    local reopened, again = pcall(ui.toggle)
+    truthy(reopened, "the second Ctrl+A raised: " .. tostring(again))
+    settle(100)
+    eq(since(mark), {}, "commands run")
+    local shown = 0
+    for i = before + 1, #notices do
+      if notices[i]:find("isn't writable", 1, true) then
+        shown = shown + 1
+      end
+    end
+    eq(shown, 1, "notices saying the folder isn't writable")
+  end
+)
+
 -- Runs after every test above, so it checks everything they recorded, the new tests
 -- included. A failure here is reported like any other test and does not stop the file.
 test("guard (all tests): only bonsai-serve status, stop and effort levels were ever run", function()
