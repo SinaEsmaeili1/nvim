@@ -740,6 +740,9 @@ local plugin_specs = {
     init = function()
       -- Bonsai's sandbox is the folder Neovim was opened in (bonsai.sandbox).
       vim.g.bonsai_root = vim.uv.cwd()
+      -- Addendum 9: Bonsai runs only while Neovim is open. Set up here, at startup: config
+      -- runs only when codecompanion loads, which can be after UIEnter (O4a).
+      require("bonsai.lifecycle").setup()
       -- Ctrl+A opens or closes Bonsai's Claude Code-style panel (bonsai.ui).
       -- Normal mode only: insert and command-line Ctrl+A still go to the start of the line.
       vim.keymap.set(

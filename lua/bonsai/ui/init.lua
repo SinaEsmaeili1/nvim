@@ -6,6 +6,7 @@
 -- agent (bonsai-agent) opens it full-screen. Rules, approvals and the sandbox
 -- are the chat's own and don't change here.
 local effort = require("bonsai.effort")
+local lifecycle = require("bonsai.lifecycle")
 local sandbox = require("bonsai.sandbox")
 local status = require("bonsai.ui.status")
 local kitty = require("bonsai.ui.kitty")
@@ -277,6 +278,95 @@ local function new_chat()
   S.base_bytes = chat_bytes()
 end
 
+-- ---- starting Bonsai (Addendum 9: it runs only while Neovim is open) ----
+
+local starting = false -- this Neovim's start is running (O1, O2)
+local pending = {} -- messages held while it runs, sent when it succeeds (O3)
+
+local function input_text()
+  if not (S.input_buf and vim.api.nvim_buf_is_valid(S.input_buf)) then
+    return nil
+  end
+  return table.concat(vim.api.nvim_buf_get_lines(S.input_buf, 0, -1, false), "\n")
+end
+
+local function set_input(text)
+  if S.input_buf and vim.api.nvim_buf_is_valid(S.input_buf) then
+    vim.api.nvim_buf_set_lines(S.input_buf, 0, -1, false, vim.split(text, "\n", { plain = true }))
+  end
+end
+
+-- O3: a held message is sent when the start succeeds. When it fails, the message stays
+-- in the input box and the reason is shown.
+local function start_done(ok, output)
+  local texts = pending
+  pending = {}
+  if not ok then
+    vim.notify(
+      "Bonsai didn't start: " .. (output ~= "" and output or "no reason given"),
+      vim.log.levels.ERROR,
+      { title = "Bonsai" }
+    )
+    return
+  end
+  if #texts > 0 and input_text() == table.concat(texts, "\n") then
+    set_input("")
+  end
+  for _, text in ipairs(texts) do
+    M.submit(text)
+  end
+end
+
+-- Starts Bonsai at the saved effort if it isn't running. The start takes the lock first
+-- (O2), then runs `bonsai-serve status` and the level. `done(ok, output)` runs when it
+-- ends. A start this Neovim already runs, or one another Neovim holds, is not repeated.
+local function start_server(done)
+  if starting or not lifecycle.try_lock() then
+    return
+  end
+  starting = true
+  local active = true
+  local function finish(ok, output)
+    if not active then
+      return
+    end
+    active = false
+    starting = false
+    lifecycle.unlock()
+    if done then
+      vim.schedule(function()
+        done(ok, output)
+      end)
+    end
+  end
+  local spawned, spawn_err = pcall(
+    vim.system,
+    { "bonsai-serve", "status" },
+    { text = true },
+    function(r)
+      if (r.stdout or ""):find("is up", 1, true) then
+        return finish(true, "")
+      end
+      vim.schedule(function()
+        local level = effort.current().name
+        vim.notify("Starting Bonsai at effort " .. level .. "…", vim.log.levels.INFO)
+        local set, set_err = pcall(effort.set, level, function(ok, out)
+          if ok then
+            vim.notify(out, vim.log.levels.INFO)
+          end
+          finish(ok, out)
+        end)
+        if not set then
+          finish(false, tostring(set_err))
+        end
+      end)
+    end
+  )
+  if not spawned then
+    finish(false, tostring(spawn_err))
+  end
+end
+
 function M.open(opts)
   opts = opts or {}
   if M.is_open() then
@@ -323,6 +413,10 @@ function M.open(opts)
   S.wins.input = vim.api.nvim_open_win(S.input_buf, true, cfg.input)
   render()
   focus_input()
+  -- O1, O1a: opening the panel starts Bonsai, but only in a Neovim with a UI.
+  if lifecycle.has_ui() then
+    start_server(start_done)
+  end
 end
 
 function M.close()
@@ -368,6 +462,11 @@ function M.submit(text)
     return vim.notify(HELP, vim.log.levels.INFO, { title = "Bonsai" })
   elseif text == "/exit" and S.agent then
     return vim.cmd("qall")
+  end
+  if starting then
+    -- O3: wait for this Neovim's start; the text stays in the input box meanwhile.
+    table.insert(pending, text)
+    return set_input(table.concat(pending, "\n"))
   end
   S.base_bytes = chat_bytes()
   S.chat:add_buf_message { role = "user", content = text }
@@ -460,32 +559,16 @@ function M.project_choices(history_path)
   return out
 end
 
--- Starts Bonsai at the saved effort if it isn't running yet.
-local function start_server()
-  vim.system({ "bonsai-serve", "status" }, { text = true }, function(r)
-    if (r.stdout or ""):find("is up", 1, true) then
-      return
-    end
-    vim.schedule(function()
-      local level = effort.current().name
-      vim.notify("Starting Bonsai at effort " .. level .. "…", vim.log.levels.INFO)
-      effort.set(level, function(ok, out)
-        vim.notify(out, ok and vim.log.levels.INFO or vim.log.levels.ERROR)
-      end)
-    end)
-  end)
-end
-
 local function start_agent()
   M.open { fullscreen = true }
-  start_server()
+  start_server(start_done)
 end
 
 -- The start menu's "Ask Bonsai" (lua/config/dashboard-nvim.lua): the panel
--- Ctrl+A opens, with Bonsai started if it isn't running.
+-- Ctrl+A opens, with Bonsai started if it isn't running (O1a: also without a UI).
 function M.start()
   M.open()
-  start_server()
+  start_server(start_done)
 end
 
 -- bonsai-agent: Bonsai as a terminal coding agent, full-screen. Started from

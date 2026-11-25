@@ -12,6 +12,8 @@ Nothing leaves my PC unless I say so. The model runs locally, and every edit, co
 
 Press **Ctrl+A** in normal mode and a panel opens on the right, laid out like Claude Code: the conversation, a status line with an animated pixel art bonsai and a plant word (*Photosynthesizing…*, *Pruning…*, *In full bloom ✓*), and an input box. In the terminal, `bonsai-agent` opens the same thing full screen. It's also in my app menu, and it's the first entry on Neovim's [start menu](#the-start-menu).
 
+Bonsai runs only while Neovim is open: opening the panel (or Ask Bonsai) starts it, and the last Neovim to close stops it, unless bonsai-web is using it.
+
 ![Asking Bonsai for a C++ function: the bonsai works while it thinks, then the answer and how long it took](assets/readme/bonsai-agent.gif)
 
 <details>
